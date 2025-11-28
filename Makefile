@@ -9,6 +9,11 @@ BUILD_DIR=build
 # Install directory
 INSTALL_DIR=/usr/local/bin
 
+# Version information
+VERSION?=dev
+GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+
 # Go parameters
 GOCMD=go
 GOBUILD=$(GOCMD) build
@@ -17,11 +22,14 @@ GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 GOCLEAN=$(GOCMD) clean
 
+# Build flags
+LDFLAGS=-ldflags "-X 'lx/cmd.Version=$(VERSION)' -X 'lx/cmd.GitCommit=$(GIT_COMMIT)' -X 'lx/cmd.BuildDate=$(BUILD_DATE)'"
+
 # Build the binary
 build:
-	@echo "Building $(BINARY_NAME)..."
+	@echo "Building $(BINARY_NAME) $(VERSION)..."
 	@mkdir -p $(BUILD_DIR)
-	@$(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) -v
+	@$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) -v
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
 
 # Install the binary to system
@@ -64,10 +72,10 @@ run: build
 build-all:
 	@echo "Building for multiple platforms..."
 	@mkdir -p $(BUILD_DIR)
-	@GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64
-	@GOOS=darwin GOARCH=amd64 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64
-	@GOOS=darwin GOARCH=arm64 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64
-	@GOOS=windows GOARCH=amd64 $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe
+	@GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64
+	@GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64
+	@GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64
+	@GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe
 	@echo "Multi-platform build complete!"
 
 # Display help

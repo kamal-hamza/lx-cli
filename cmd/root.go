@@ -55,10 +55,15 @@ func init() {
 	rootCmd.AddCommand(newCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(openCmd)
+	rootCmd.AddCommand(editCmd)
 	rootCmd.AddCommand(deleteCmd)
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(buildAllCmd)
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(gitCmd)
+	rootCmd.AddCommand(cloneCmd)
+	rootCmd.AddCommand(syncCmd)
 
 	// Global flags can be added here if needed
 }

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
@@ -14,48 +15,46 @@ import (
 )
 
 var (
-	openTemplate bool
+	editTemplate bool
 )
 
-// openCmd represents the open command
-var openCmd = &cobra.Command{
-	Use:   "open [query]",
-	Short: "Open a note PDF or template in the default viewer",
-	Long: `Open a note PDF or template using fuzzy search.
+// editCmd represents the edit command
+var editCmd = &cobra.Command{
+	Use:   "edit [query]",
+	Short: "Edit a note or template in your editor",
+	Long: `Edit a note or template in your editor using fuzzy search.
 If no query is provided, shows an interactive list to select from.
 
-For notes, this opens the compiled PDF. For templates, this opens the .sty file.
-
 Examples:
-  # Open a note PDF
-  lx open
-  lx open graph
-  lx open "chemistry lab"
-  lx open calc
+  # Edit a note
+  lx edit
+  lx edit graph
+  lx edit "chemistry lab"
+  lx edit calc
 
-  # Open a template
-  lx open -t
-  lx open -t homework
-  lx open --template "my custom"`,
+  # Edit a template
+  lx edit -t
+  lx edit -t homework
+  lx edit --template "my custom"`,
 	Args: cobra.MaximumNArgs(1),
-	RunE: runOpen,
+	RunE: runEdit,
 }
 
 func init() {
-	openCmd.Flags().BoolVarP(&openTemplate, "template", "t", false, "Open a template instead of a note")
+	editCmd.Flags().BoolVarP(&editTemplate, "template", "t", false, "Edit a template instead of a note")
 }
 
-func runOpen(cmd *cobra.Command, args []string) error {
+func runEdit(cmd *cobra.Command, args []string) error {
 	// Check if template flag is set
-	if openTemplate {
-		return runOpenTemplate(cmd, args)
+	if editTemplate {
+		return runEditTemplate(cmd, args)
 	}
 
-	// Otherwise, open a note
-	return runOpenNote(cmd, args)
+	// Otherwise, edit a note
+	return runEditNote(cmd, args)
 }
 
-func runOpenNote(cmd *cobra.Command, args []string) error {
+func runEditNote(_ *cobra.Command, args []string) error {
 	ctx := getContext()
 
 	var resp *services.SearchResponse
@@ -177,31 +176,34 @@ func runOpenNote(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 	}
 
-	fmt.Println(ui.FormatInfo("Opening: " + selectedNote.Title))
+	fmt.Println(ui.FormatInfo("Editing: " + selectedNote.Title))
 	fmt.Println()
 
-	// Get the PDF path (in cache directory)
-	pdfName := strings.TrimSuffix(selectedNote.Filename, ".tex") + ".pdf"
-	pdfPath := appVault.GetCachePath(pdfName)
+	// Get the note file path
+	notePath := appVault.GetNotePath(selectedNote.Filename)
 
-	// Check if PDF exists
-	if _, err := os.Stat(pdfPath); os.IsNotExist(err) {
-		fmt.Println(ui.FormatWarning("PDF not found. The note may not have been built yet."))
-		fmt.Println(ui.FormatInfo("Build it first with: lx build " + selectedNote.Slug))
-		return nil
+	// Get editor
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi" // Default fallback
 	}
 
-	// Open PDF with system default viewer
-	if err := openFile(pdfPath); err != nil {
-		fmt.Println(ui.FormatError("Failed to open PDF: " + err.Error()))
-		fmt.Println(ui.FormatInfo("You can manually open: " + pdfPath))
+	// Launch editor
+	editorCmd := exec.Command(editor, notePath)
+	editorCmd.Stdin = os.Stdin
+	editorCmd.Stdout = os.Stdout
+	editorCmd.Stderr = os.Stderr
+
+	if err := editorCmd.Run(); err != nil {
+		fmt.Println(ui.FormatError("Failed to open editor: " + err.Error()))
+		fmt.Println(ui.FormatInfo("You can manually edit: " + notePath))
 		return err
 	}
 
 	return nil
 }
 
-func runOpenTemplate(cmd *cobra.Command, args []string) error {
+func runEditTemplate(_ *cobra.Command, args []string) error {
 	ctx := getContext()
 	useFuzzyFinder := len(args) == 0
 
@@ -303,16 +305,27 @@ func runOpenTemplate(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 	}
 
-	fmt.Println(ui.FormatInfo("Opening template: " + selectedTemplate.Name))
+	fmt.Println(ui.FormatInfo("Editing template: " + selectedTemplate.Name))
 	fmt.Println()
 
 	// Get the template file path
 	templatePath := selectedTemplate.Path
 
-	// Open with system default viewer
-	if err := openFile(templatePath); err != nil {
-		fmt.Println(ui.FormatError("Failed to open template: " + err.Error()))
-		fmt.Println(ui.FormatInfo("You can manually open: " + templatePath))
+	// Get editor
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi" // Default fallback
+	}
+
+	// Launch editor
+	editorCmd := exec.Command(editor, templatePath)
+	editorCmd.Stdin = os.Stdin
+	editorCmd.Stdout = os.Stdout
+	editorCmd.Stderr = os.Stderr
+
+	if err := editorCmd.Run(); err != nil {
+		fmt.Println(ui.FormatError("Failed to open editor: " + err.Error()))
+		fmt.Println(ui.FormatInfo("You can manually edit: " + templatePath))
 		return err
 	}
 
