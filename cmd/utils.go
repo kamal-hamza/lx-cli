@@ -76,3 +76,52 @@ func checkAndInstallPandoc() error {
 
 	return nil
 }
+
+// OpenEditorAtLine opens the user's preferred editor at a specific line number.
+func OpenEditorAtLine(path string, line int) error {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi" // Default fallback
+	}
+
+	var args []string
+	lowerEditor := strings.ToLower(editor)
+
+	// Strategy 1: VS Code family (Code, Cursor, Windsurf)
+	// These REQUIRE the -g flag to parse line numbers: `code -g file:line`
+	if strings.Contains(lowerEditor, "code") ||
+		strings.Contains(lowerEditor, "cursor") ||
+		strings.Contains(lowerEditor, "windsurf") {
+		args = []string{"-g", fmt.Sprintf("%s:%d", path, line)}
+
+		// Strategy 2: Sublime Text, Zed, IntelliJ/GoLand
+		// These support direct `file:line` syntax without flags
+	} else if strings.Contains(lowerEditor, "subl") ||
+		strings.Contains(lowerEditor, "zed") || // <--- Added Zed Support
+		strings.Contains(lowerEditor, "idea") ||
+		strings.Contains(lowerEditor, "goland") {
+		args = []string{fmt.Sprintf("%s:%d", path, line)}
+
+		// Strategy 3: Terminal Editors (Vim, Nano, Kakoune, Emacs)
+		// Standard Unix syntax: `vim +line file`
+	} else {
+		args = []string{fmt.Sprintf("+%d", line), path}
+	}
+
+	// Run the editor
+	cmd := exec.Command(editor, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		// Fallback: If line number fails, just open the file
+		fallback := exec.Command(editor, path)
+		fallback.Stdin = os.Stdin
+		fallback.Stdout = os.Stdout
+		fallback.Stderr = os.Stderr
+		return fallback.Run()
+	}
+
+	return nil
+}
