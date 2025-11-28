@@ -192,7 +192,7 @@ func runOpenNote(cmd *cobra.Command, args []string) error {
 	}
 
 	// Open PDF with system default viewer
-	if err := openFile(pdfPath); err != nil {
+	if err := OpenFileWithDefaultApp(pdfPath); err != nil {
 		fmt.Println(ui.FormatError("Failed to open PDF: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually open: " + pdfPath))
 		return err
@@ -310,7 +310,7 @@ func runOpenTemplate(cmd *cobra.Command, args []string) error {
 	templatePath := selectedTemplate.Path
 
 	// Open with system default viewer
-	if err := openFile(templatePath); err != nil {
+	if err := OpenFileWithDefaultApp(templatePath); err != nil {
 		fmt.Println(ui.FormatError("Failed to open template: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually open: " + templatePath))
 		return err

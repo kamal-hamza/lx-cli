@@ -207,7 +207,7 @@ func runBuildNote(cmd *cobra.Command, args []string) error {
 	// Open PDF if requested
 	if buildOpen {
 		fmt.Println(ui.FormatInfo("Opening PDF..."))
-		if err := openFile(buildResp.OutputPath); err != nil {
+		if err := OpenFileWithDefaultApp(buildResp.OutputPath); err != nil {
 			fmt.Println(ui.FormatWarning("Failed to open PDF: " + err.Error()))
 			fmt.Println(ui.FormatInfo("You can manually open: " + buildResp.OutputPath))
 		}
