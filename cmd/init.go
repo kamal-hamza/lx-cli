@@ -84,6 +84,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println(ui.FormatMuted("  notes/      - Your LaTeX notes (.tex files)"))
 	fmt.Println(ui.FormatMuted("  templates/  - Your style files (.sty files)"))
 	fmt.Println(ui.FormatMuted("  cache/      - Compiled PDFs and build artifacts"))
+	fmt.Println(ui.FormatMuted("  assets/      - Static assets (images, bibliographies, etc.)"))
 	fmt.Println()
 	fmt.Println(ui.FormatInfo("Next steps:"))
 	fmt.Println(ui.FormatMuted("  1. Create your first note: lx new \"My First Note\""))
@@ -117,25 +118,24 @@ func createDefaultConfig(v *vault.Vault) error {
 }
 
 func createLatexmkrc(v *vault.Vault) error {
-	// This file tells your editor (VS Code, VimTeX, etc.) to:
-	// 1. Output all build files to ../cache
-	// 2. Look in ../templates for .sty files
+	// We need to add BOTH templates and assets to the path
 	content := `# LX Editor Configuration
-# This ensures your editor uses the shared cache and templates.
-
 $out_dir = '../cache';
 $pdf_mode = 1;
 
-# Add templates folder to TEXINPUTS (recursively)
+# Recursive search for templates and assets
 my $templates_path = '../templates//';
+my $assets_path = '../assets//';
+
+# Platform-specific path separator
+my $sep = ($^O eq 'MSWin32') ? ';' : ':';
 
 if ($^O eq 'MSWin32') {
-    $ENV{'TEXINPUTS'} = $templates_path . ';' . $ENV{'TEXINPUTS'};
+    $ENV{'TEXINPUTS'} = $templates_path . $sep . $assets_path . $sep . $ENV{'TEXINPUTS'};
 } else {
-    $ENV{'TEXINPUTS'} = $templates_path . ':' . $ENV{'TEXINPUTS'};
+    $ENV{'TEXINPUTS'} = $templates_path . $sep . $assets_path . $sep . $ENV{'TEXINPUTS'};
 }
 `
-	// We place this INSIDE the notes folder because that is where the editor runs latexmk
 	path := filepath.Join(v.NotesPath, ".latexmkrc")
 	return os.WriteFile(path, []byte(content), 0644)
 }

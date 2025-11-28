@@ -79,6 +79,9 @@ func init() {
 	rootCmd.AddCommand(linksCmd)
 	rootCmd.AddCommand(exploreCmd)
 	rootCmd.AddCommand(exportCmd)
+	rootCmd.AddCommand(attachCmd)
+	rootCmd.AddCommand(watchCmd)
+	rootCmd.AddCommand(todoCmd)
 
 	// Global flags can be added here if needed
 }
