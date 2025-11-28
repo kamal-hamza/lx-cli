@@ -1,0 +1,171 @@
+# LX - LaTeX Notes Manager Configuration
+# Copy this file to ~/.config/lx/config.yaml and customize as needed
+
+# Default template to use when creating new notes
+# Leave empty to use no template (plain LaTeX document)
+# Example: "article", "notes", "research"
+default_template: ""
+
+# Default editor for editing notes
+# If not set, uses the $EDITOR environment variable
+# If $EDITOR is also not set, falls back to system defaults
+# Examples: "vim", "nvim", "emacs", "code", "nano"
+editor: ""
+
+# Number of concurrent jobs for build-all command
+# Higher values speed up batch building but use more CPU
+# Default: 4
+# Recommended: Set to number of CPU cores or less
+max_workers: 4
+
+# Automatic reindexing after note modifications
+# When enabled, the knowledge graph index is automatically updated
+# after creating, editing, or deleting notes
+# Default: true
+auto_reindex: true
+
+# Default sort order for list command
+# Options: "date", "title", "modified"
+# Default: "date"
+default_sort: "date"
+
+# Reverse sort order by default
+# Default: false
+reverse_sort: false
+
+# Date format for note creation
+# The format used for the date prefix in note filenames
+# Default: "20060102" (YYYYMMDD)
+# Examples:
+#   "20060102" -> 20240115
+#   "2006-01-02" -> 2024-01-15
+date_format: "20060102"
+
+# Display date format
+# Format used when displaying dates in the UI
+# Default: "2006-01-02" (YYYY-MM-DD)
+# Examples:
+#   "2006-01-02" -> 2024-01-15
+#   "Jan 02, 2006" -> Jan 15, 2024
+#   "02/01/2006" -> 15/01/2024
+display_date_format: "2006-01-02"
+
+# LaTeX compiler settings
+# PDF viewer for opening compiled notes
+# If not set, uses system default PDF viewer
+# Examples: "zathura", "evince", "okular", "Preview", "Acrobat Reader"
+pdf_viewer: ""
+
+# Additional latexmk flags for compilation
+# These flags are passed to latexmk when building notes
+# Default: ["-pdf", "-interaction=nonstopmode"]
+# Example: ["-pdf", "-shell-escape", "-synctex=1"]
+latexmk_flags:
+  - "-pdf"
+  - "-interaction=nonstopmode"
+
+# Watch mode settings
+# Debounce delay in milliseconds for watch mode
+# Prevents rebuilding on rapid successive file changes
+# Default: 500
+watch_debounce_ms: 500
+
+# Git integration settings
+# Automatically initialize git repository on vault creation
+# Default: false
+git_auto_init: false
+
+# Default commit message template for sync command
+# Available placeholders: {date}, {time}, {count}
+# Example: "Auto-sync: {count} changes on {date}"
+# Default: "Auto-sync: {date} {time}"
+git_commit_template: "Auto-sync: {date} {time}"
+
+# Automatically pull before push in sync command
+# Default: true
+git_auto_pull: true
+
+# Graph visualization settings
+# Default graph layout direction for DOT export
+# Options: "LR" (left-to-right), "TB" (top-to-bottom), "RL", "BT"
+# Default: "LR"
+graph_direction: "LR"
+
+# Maximum number of nodes to display in interactive graph
+# Larger graphs may be slow to render
+# Set to 0 for unlimited
+# Default: 100
+graph_max_nodes: 100
+
+# UI settings
+# Color theme for terminal output
+# Options: "auto", "dark", "light"
+# Default: "auto"
+color_theme: "auto"
+
+# Enable syntax highlighting in preview windows
+# Default: true
+syntax_highlighting: true
+
+# Table width for list command (in characters)
+# Set to 0 for automatic width based on terminal size
+# Default: 0
+table_width: 0
+
+# Search settings
+# Case sensitivity for grep command
+# Default: false
+grep_case_sensitive: false
+
+# Number of context lines to show in grep results
+# Default: 2
+grep_context_lines: 2
+
+# Maximum number of search results to display
+# Default: 50
+max_search_results: 50
+
+# Backup settings
+# Automatically backup notes before destructive operations
+# Default: true
+auto_backup: true
+
+# Number of backups to keep
+# Older backups are automatically removed
+# Set to 0 for unlimited
+# Default: 5
+backup_retention: 5
+
+# Performance settings
+# Enable caching for faster operations
+# Default: true
+enable_cache: true
+
+# Cache expiration time in minutes
+# Default: 30
+cache_expiration_minutes: 30
+
+# Export settings
+# Default export format
+# Options: "pdf", "html", "markdown", "docx"
+# Default: "pdf"
+default_export_format: "pdf"
+
+# Include assets when exporting
+# Default: true
+export_include_assets: true
+
+# Templates settings
+# Custom template directory (in addition to vault templates/)
+# Useful for shared templates across multiple vaults
+# Example: "~/Documents/latex-templates"
+custom_template_dir: ""
+
+# Notification settings
+# Show desktop notifications for long-running operations
+# Default: false
+desktop_notifications: false
+
+# Sound notification on build completion
+# Default: false
+sound_notifications: false
