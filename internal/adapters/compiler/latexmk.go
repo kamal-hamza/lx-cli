@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"lx/pkg/vault"
+	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 // LatexmkCompiler implements the Compiler port using latexmk

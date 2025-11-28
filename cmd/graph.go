@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"lx/internal/core/services"
-	"lx/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/internal/core/services"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
 
 	"github.com/go-echarts/go-echarts/v2/charts"
 	"github.com/go-echarts/go-echarts/v2/opts"

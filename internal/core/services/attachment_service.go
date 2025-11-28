@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"lx/pkg/vault"
+	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 type AttachmentService struct {

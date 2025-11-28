@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"lx/internal/core/domain"
-	"lx/pkg/vault"
+	"github.com/kamal-hamza/lx-cli/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 // TemplateRepository implements the TemplateRepository port using the file system

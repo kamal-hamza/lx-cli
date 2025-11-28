@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"lx/pkg/vault"
+	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 // TectonicCompiler implements the Compiler port using Tectonic

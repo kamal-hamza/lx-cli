@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"lx/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
 
 	"github.com/spf13/cobra"
 )

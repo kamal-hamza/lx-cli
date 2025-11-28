@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"lx/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"

@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"lx/internal/assets"
-	"lx/internal/core/domain"
-	"lx/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/internal/assets"
+	"github.com/kamal-hamza/lx-cli/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
 
 	"github.com/spf13/cobra"
 )

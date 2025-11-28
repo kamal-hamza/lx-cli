@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"lx/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
 )
 
 // Version information - these can be set during build with ldflags

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"lx/pkg/vault"
+	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 func TestAttachmentService_Store_Success(t *testing.T) {

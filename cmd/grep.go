@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"lx/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
 
 	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
 	"github.com/spf13/cobra"

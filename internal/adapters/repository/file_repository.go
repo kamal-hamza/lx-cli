@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"lx/internal/core/domain"
-	"lx/pkg/vault"
+	"github.com/kamal-hamza/lx-cli/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 // FileRepository implements the Repository port using the file system

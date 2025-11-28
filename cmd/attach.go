@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"lx/internal/core/services"
-	"lx/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/internal/core/services"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
 
 	"github.com/atotto/clipboard"
 	"github.com/spf13/cobra"

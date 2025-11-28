@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"lx/internal/core/services"
-	"lx/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/internal/core/services"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
 )
 
 var (

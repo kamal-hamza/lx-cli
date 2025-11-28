@@ -7,11 +7,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"lx/internal/adapters/compiler"
-	"lx/internal/adapters/repository"
-	"lx/internal/core/services"
-	"lx/pkg/ui"
-	"lx/pkg/vault"
+	"github.com/kamal-hamza/lx-cli/internal/adapters/compiler"
+	"github.com/kamal-hamza/lx-cli/internal/adapters/repository"
+	"github.com/kamal-hamza/lx-cli/internal/core/services"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 var (
