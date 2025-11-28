@@ -80,6 +80,7 @@ func init() {
 	rootCmd.AddCommand(exploreCmd)
 	rootCmd.AddCommand(exportCmd)
 	rootCmd.AddCommand(attachCmd)
+	rootCmd.AddCommand(watchCmd)
 
 	// Global flags can be added here if needed
 }
