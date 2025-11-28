@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
 	"github.com/spf13/cobra"
 
 	"lx/internal/core/domain"
@@ -23,19 +24,22 @@ var buildCmd = &cobra.Command{
 	Use:   "build [query]",
 	Short: "Build a LaTeX note to PDF or test a template",
 	Long: `Build a LaTeX note to PDF using latexmk, or test build a template.
+If no query is provided, shows an interactive list to select from.
 
 The output PDF will be stored in the cache directory.
 
 Examples:
   # Build a note
+  lx build
   lx build graph
   lx build "chemistry lab"
   lx build calc --open
 
   # Test build a template
+  lx build -t
   lx build -t homework
   lx build --template "my custom"`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: runBuild,
 }
 
@@ -55,38 +59,129 @@ func runBuild(cmd *cobra.Command, args []string) error {
 }
 
 func runBuildNote(cmd *cobra.Command, args []string) error {
-	query := args[0]
-
-	// Search for the note
-	searchReq := services.SearchRequest{
-		Query: query,
-	}
-
 	ctx := getContext()
-	searchResp, err := listService.Search(ctx, searchReq)
-	if err != nil {
-		fmt.Println(ui.FormatError("Failed to search notes"))
-		return err
-	}
 
-	// Handle no results
-	if searchResp.Total == 0 {
-		fmt.Println(ui.FormatWarning("No notes found matching: " + query))
-		return nil
-	}
+	var searchResp *services.SearchResponse
+	var err error
+	useFuzzyFinder := len(args) == 0
 
-	// Select the first match
-	selectedNote := searchResp.Notes[0]
+	// If no query provided, get all notes for interactive selection
+	if useFuzzyFinder {
+		req := services.ListRequest{
+			SortBy: "date",
+		}
+		listResp, err := listService.Execute(ctx, req)
+		if err != nil {
+			fmt.Println(ui.FormatError("Failed to list notes"))
+			return err
+		}
 
-	// Show what we're building
-	if searchResp.Total > 1 {
-		fmt.Println(ui.FormatInfo(fmt.Sprintf("Found %d matches, building first:", searchResp.Total)))
-		fmt.Println(ui.StyleAccent.Render("→ " + selectedNote.Title + " (" + selectedNote.Slug + ")"))
-		fmt.Println()
+		if listResp.Total == 0 {
+			fmt.Println(ui.FormatWarning("No notes found"))
+			fmt.Println(ui.FormatInfo("Create your first note with: lx new \"My Note\""))
+			return nil
+		}
+
+		searchResp = &services.SearchResponse{
+			Notes: listResp.Notes,
+			Total: listResp.Total,
+		}
 	} else {
-		fmt.Println(ui.FormatInfo("Building: " + selectedNote.Title))
+		query := args[0]
+
+		// Search for the note
+		searchReq := services.SearchRequest{
+			Query: query,
+		}
+
+		searchResp, err = listService.Search(ctx, searchReq)
+		if err != nil {
+			fmt.Println(ui.FormatError("Failed to search notes"))
+			return err
+		}
+
+		// Handle no results
+		if searchResp.Total == 0 {
+			fmt.Println(ui.FormatWarning("No notes found matching: " + query))
+			return nil
+		}
+	}
+
+	// Select note
+	var selectedNote *domain.NoteHeader
+	if searchResp.Total == 1 {
+		selectedNote = &searchResp.Notes[0]
+	} else if useFuzzyFinder {
+		// Use fuzzy finder when no query was provided
+		idx, err := fuzzyfinder.Find(
+			searchResp.Notes,
+			func(i int) string {
+				return searchResp.Notes[i].Title
+			},
+			fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
+				if i == -1 {
+					return ""
+				}
+				note := searchResp.Notes[i]
+				preview := fmt.Sprintf("Title: %s\nSlug: %s\nDate: %s",
+					note.Title,
+					note.Slug,
+					note.GetDisplayDate())
+				if len(note.Tags) > 0 {
+					preview += fmt.Sprintf("\nTags: %s", note.GetTagsString())
+				}
+				return preview
+			}),
+		)
+		if err != nil {
+			// User cancelled (Ctrl+C or ESC)
+			fmt.Println(ui.FormatInfo("Operation cancelled."))
+			return nil
+		}
+		selectedNote = &searchResp.Notes[idx]
+	} else {
+		// Use numbered list when query was provided
+		fmt.Println(ui.FormatInfo(fmt.Sprintf("Found %d matches:", searchResp.Total)))
+		fmt.Println()
+
+		// Display numbered list of notes
+		for i, note := range searchResp.Notes {
+			fmt.Printf("%s %d. %s %s\n",
+				ui.StyleAccent.Render(""),
+				i+1,
+				ui.StyleBold.Render(note.Title),
+				ui.StyleMuted.Render("("+note.Slug+")"))
+		}
+		fmt.Println()
+
+		// Prompt for selection with retry loop
+		var selection int
+		for {
+			fmt.Print(ui.StyleInfo.Render("Select a note (1-" + fmt.Sprintf("%d", searchResp.Total) + "): "))
+
+			_, err := fmt.Scanln(&selection)
+			if err != nil {
+				// Clear the buffer on input error
+				var discard string
+				fmt.Scanln(&discard)
+				fmt.Println(ui.FormatWarning("Invalid input. Please enter a number."))
+				continue
+			}
+
+			if selection < 1 || selection > searchResp.Total {
+				fmt.Println(ui.FormatWarning(fmt.Sprintf("Please enter a number between 1 and %d.", searchResp.Total)))
+				continue
+			}
+
+			// Valid selection
+			selectedNote = &searchResp.Notes[selection-1]
+			break
+		}
 		fmt.Println()
 	}
+
+	fmt.Println(ui.FormatInfo("Building: " + selectedNote.Title))
+	fmt.Println()
 
 	// Build the note
 	buildReq := services.BuildRequest{
@@ -140,8 +235,8 @@ func openFile(path string) error {
 }
 
 func runBuildTemplate(cmd *cobra.Command, args []string) error {
-	query := args[0]
 	ctx := getContext()
+	useFuzzyFinder := len(args) == 0
 
 	// Get all templates
 	templates, err := templateRepo.List(ctx)
@@ -152,26 +247,57 @@ func runBuildTemplate(cmd *cobra.Command, args []string) error {
 
 	if len(templates) == 0 {
 		fmt.Println(ui.FormatWarning("No templates found"))
+		fmt.Println(ui.FormatInfo("Create a template with: lx new template \"title\""))
 		return nil
 	}
 
-	// Filter templates matching the query
+	// Filter templates matching the query (if provided)
 	var matches []domain.Template
-	queryLower := strings.ToLower(query)
-	for _, template := range templates {
-		if strings.Contains(strings.ToLower(template.Name), queryLower) {
-			matches = append(matches, template)
+	if useFuzzyFinder {
+		// No query - show all templates
+		matches = templates
+	} else {
+		query := args[0]
+		queryLower := strings.ToLower(query)
+		for _, template := range templates {
+			if strings.Contains(strings.ToLower(template.Name), queryLower) {
+				matches = append(matches, template)
+			}
+		}
+
+		if len(matches) == 0 {
+			fmt.Println(ui.FormatWarning("No templates found matching: " + query))
+			return nil
 		}
 	}
 
-	if len(matches) == 0 {
-		fmt.Println(ui.FormatWarning("No templates found matching: " + query))
-		return nil
-	}
-
-	// If multiple matches, prompt user to select one
+	// Select template
 	var selectedTemplate *domain.Template
-	if len(matches) > 1 {
+	if len(matches) == 1 {
+		selectedTemplate = &matches[0]
+	} else if useFuzzyFinder {
+		// Use fuzzy finder when no query was provided
+		idx, err := fuzzyfinder.Find(
+			matches,
+			func(i int) string {
+				return matches[i].Name
+			},
+			fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
+				if i == -1 {
+					return ""
+				}
+				template := matches[i]
+				return fmt.Sprintf("Name: %s\nPath: %s", template.Name, template.Path)
+			}),
+		)
+		if err != nil {
+			// User cancelled (Ctrl+C or ESC)
+			fmt.Println(ui.FormatInfo("Operation cancelled."))
+			return nil
+		}
+		selectedTemplate = &matches[idx]
+	} else {
+		// Use numbered list when query was provided
 		fmt.Println(ui.FormatInfo(fmt.Sprintf("Found %d matches:", len(matches))))
 		fmt.Println()
 
@@ -208,8 +334,6 @@ func runBuildTemplate(cmd *cobra.Command, args []string) error {
 			break
 		}
 		fmt.Println()
-	} else {
-		selectedTemplate = &matches[0]
 	}
 
 	fmt.Println(ui.FormatInfo("Testing template: " + selectedTemplate.Name))

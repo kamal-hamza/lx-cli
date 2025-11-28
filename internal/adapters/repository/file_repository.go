@@ -129,19 +129,19 @@ func (r *FileRepository) parseHeader(filename string) (*domain.NoteHeader, error
 	text := string(content)
 
 	// Parse title from % title: format
-	titleRe := regexp.MustCompile(`(?m)^%\s*title:\s*(.+)$`)
+	titleRe := regexp.MustCompile(`(?m)^%+\s*title:\s*(.+)$`)
 	if matches := titleRe.FindStringSubmatch(text); len(matches) > 1 {
 		header.Title = strings.TrimSpace(matches[1])
 	}
 
 	// Parse date from % date: format
-	dateRe := regexp.MustCompile(`(?m)^%\s*date:\s*(.+)$`)
+	dateRe := regexp.MustCompile(`(?m)^%+\s*date:\s*(.+)$`)
 	if matches := dateRe.FindStringSubmatch(text); len(matches) > 1 {
 		header.Date = strings.TrimSpace(matches[1])
 	}
 
 	// Parse tags from % tags: format (comma-separated)
-	tagsRe := regexp.MustCompile(`(?m)^%\s*tags:\s*(.+)$`)
+	tagsRe := regexp.MustCompile(`(?m)^%+\s*tags:\s*(.*)$`)
 	if matches := tagsRe.FindStringSubmatch(text); len(matches) > 1 {
 		tagsStr := strings.TrimSpace(matches[1])
 		if tagsStr != "" {
@@ -172,11 +172,13 @@ func (r *FileRepository) ensureMetadata(note *domain.NoteBody) string {
 
 	if !hasMetadata {
 		// Prepend metadata
-		metadata := fmt.Sprintf("%%%% Metadata\n")
+		metadata := fmt.Sprintf("%% Metadata\n")
 		metadata += fmt.Sprintf("%% title: %s\n", note.Header.Title)
 		metadata += fmt.Sprintf("%% date: %s\n", note.Header.Date)
 		if len(note.Header.Tags) > 0 {
 			metadata += fmt.Sprintf("%% tags: %s\n", strings.Join(note.Header.Tags, ", "))
+		} else {
+			metadata += "%% tags: \n"
 		}
 		metadata += "\n"
 

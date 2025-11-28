@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 
+	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
 	"github.com/spf13/cobra"
 
 	"lx/internal/core/domain"
@@ -23,17 +23,20 @@ var openCmd = &cobra.Command{
 	Use:   "open [query]",
 	Short: "Open a note or template in your editor",
 	Long: `Open a note or template in your editor using fuzzy search.
+If no query is provided, shows an interactive list to select from.
 
 Examples:
   # Open a note
+  lx open
   lx open graph
   lx open "chemistry lab"
   lx open calc
 
   # Open a template
+  lx open -t
   lx open -t homework
   lx open --template "my custom"`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: runOpen,
 }
 
@@ -52,29 +55,88 @@ func runOpen(cmd *cobra.Command, args []string) error {
 }
 
 func runOpenNote(cmd *cobra.Command, args []string) error {
-	query := args[0]
-
-	// Search for notes matching the query
-	req := services.SearchRequest{
-		Query: query,
-	}
-
 	ctx := getContext()
-	resp, err := listService.Search(ctx, req)
-	if err != nil {
-		fmt.Println(ui.FormatError("Failed to search notes"))
-		return err
+
+	var resp *services.SearchResponse
+	var err error
+	useFuzzyFinder := len(args) == 0
+
+	// If no query provided, get all notes for interactive selection
+	if useFuzzyFinder {
+		req := services.ListRequest{
+			SortBy: "date",
+		}
+		listResp, err := listService.Execute(ctx, req)
+		if err != nil {
+			fmt.Println(ui.FormatError("Failed to list notes"))
+			return err
+		}
+
+		if listResp.Total == 0 {
+			fmt.Println(ui.FormatWarning("No notes found"))
+			fmt.Println(ui.FormatInfo("Create your first note with: lx new \"My Note\""))
+			return nil
+		}
+
+		resp = &services.SearchResponse{
+			Notes: listResp.Notes,
+			Total: listResp.Total,
+		}
+	} else {
+		query := args[0]
+
+		// Search for notes matching the query
+		req := services.SearchRequest{
+			Query: query,
+		}
+
+		resp, err = listService.Search(ctx, req)
+		if err != nil {
+			fmt.Println(ui.FormatError("Failed to search notes"))
+			return err
+		}
+
+		// Handle no results
+		if resp.Total == 0 {
+			fmt.Println(ui.FormatWarning("No notes found matching: " + query))
+			return nil
+		}
 	}
 
-	// Handle no results
-	if resp.Total == 0 {
-		fmt.Println(ui.FormatWarning("No notes found matching: " + query))
-		return nil
-	}
-
-	// If multiple matches, prompt user to select one
+	// Select note
 	var selectedNote *domain.NoteHeader
-	if resp.Total > 1 {
+	if resp.Total == 1 {
+		selectedNote = &resp.Notes[0]
+	} else if useFuzzyFinder {
+		// Use fuzzy finder when no query was provided
+		idx, err := fuzzyfinder.Find(
+			resp.Notes,
+			func(i int) string {
+				return resp.Notes[i].Title
+			},
+			fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
+				if i == -1 {
+					return ""
+				}
+				note := resp.Notes[i]
+				preview := fmt.Sprintf("Title: %s\nSlug: %s\nDate: %s",
+					note.Title,
+					note.Slug,
+					note.GetDisplayDate())
+				if len(note.Tags) > 0 {
+					preview += fmt.Sprintf("\nTags: %s", note.GetTagsString())
+				}
+				return preview
+			}),
+		)
+		if err != nil {
+			// User cancelled (Ctrl+C or ESC)
+			fmt.Println(ui.FormatInfo("Operation cancelled."))
+			return nil
+		}
+		selectedNote = &resp.Notes[idx]
+	} else {
+		// Use numbered list when query was provided
 		fmt.Println(ui.FormatInfo(fmt.Sprintf("Found %d matches:", resp.Total)))
 		fmt.Println()
 
@@ -91,7 +153,7 @@ func runOpenNote(cmd *cobra.Command, args []string) error {
 		// Prompt for selection with retry loop
 		var selection int
 		for {
-			fmt.Print(ui.StyleInfo.Render("Select a note (1-" + strconv.Itoa(resp.Total) + "): "))
+			fmt.Print(ui.StyleInfo.Render("Select a note (1-" + fmt.Sprintf("%d", resp.Total) + "): "))
 
 			_, err := fmt.Scanln(&selection)
 			if err != nil {
@@ -112,8 +174,6 @@ func runOpenNote(cmd *cobra.Command, args []string) error {
 			break
 		}
 		fmt.Println()
-	} else {
-		selectedNote = &resp.Notes[0]
 	}
 
 	fmt.Println(ui.FormatInfo("Opening: " + selectedNote.Title))
@@ -144,8 +204,8 @@ func runOpenNote(cmd *cobra.Command, args []string) error {
 }
 
 func runOpenTemplate(cmd *cobra.Command, args []string) error {
-	query := args[0]
 	ctx := getContext()
+	useFuzzyFinder := len(args) == 0
 
 	// Get all templates
 	templates, err := templateRepo.List(ctx)
@@ -156,26 +216,57 @@ func runOpenTemplate(cmd *cobra.Command, args []string) error {
 
 	if len(templates) == 0 {
 		fmt.Println(ui.FormatWarning("No templates found"))
+		fmt.Println(ui.FormatInfo("Create a template with: lx new template \"title\""))
 		return nil
 	}
 
-	// Filter templates matching the query
+	// Filter templates matching the query (if provided)
 	var matches []domain.Template
-	queryLower := strings.ToLower(query)
-	for _, template := range templates {
-		if strings.Contains(strings.ToLower(template.Name), queryLower) {
-			matches = append(matches, template)
+	if useFuzzyFinder {
+		// No query - show all templates
+		matches = templates
+	} else {
+		query := args[0]
+		queryLower := strings.ToLower(query)
+		for _, template := range templates {
+			if strings.Contains(strings.ToLower(template.Name), queryLower) {
+				matches = append(matches, template)
+			}
+		}
+
+		if len(matches) == 0 {
+			fmt.Println(ui.FormatWarning("No templates found matching: " + query))
+			return nil
 		}
 	}
 
-	if len(matches) == 0 {
-		fmt.Println(ui.FormatWarning("No templates found matching: " + query))
-		return nil
-	}
-
-	// If multiple matches, prompt user to select one
+	// Select template
 	var selectedTemplate *domain.Template
-	if len(matches) > 1 {
+	if len(matches) == 1 {
+		selectedTemplate = &matches[0]
+	} else if useFuzzyFinder {
+		// Use fuzzy finder when no query was provided
+		idx, err := fuzzyfinder.Find(
+			matches,
+			func(i int) string {
+				return matches[i].Name
+			},
+			fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
+				if i == -1 {
+					return ""
+				}
+				template := matches[i]
+				return fmt.Sprintf("Name: %s\nPath: %s", template.Name, template.Path)
+			}),
+		)
+		if err != nil {
+			// User cancelled (Ctrl+C or ESC)
+			fmt.Println(ui.FormatInfo("Operation cancelled."))
+			return nil
+		}
+		selectedTemplate = &matches[idx]
+	} else {
+		// Use numbered list when query was provided
 		fmt.Println(ui.FormatInfo(fmt.Sprintf("Found %d matches:", len(matches))))
 		fmt.Println()
 
@@ -191,7 +282,7 @@ func runOpenTemplate(cmd *cobra.Command, args []string) error {
 		// Prompt for selection with retry loop
 		var selection int
 		for {
-			fmt.Print(ui.StyleInfo.Render("Select a template (1-" + strconv.Itoa(len(matches)) + "): "))
+			fmt.Print(ui.StyleInfo.Render("Select a template (1-" + fmt.Sprintf("%d", len(matches)) + "): "))
 
 			_, err := fmt.Scanln(&selection)
 			if err != nil {
@@ -212,8 +303,6 @@ func runOpenTemplate(cmd *cobra.Command, args []string) error {
 			break
 		}
 		fmt.Println()
-	} else {
-		selectedTemplate = &matches[0]
 	}
 
 	fmt.Println(ui.FormatInfo("Opening template: " + selectedTemplate.Name))

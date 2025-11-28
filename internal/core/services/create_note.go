@@ -79,11 +79,13 @@ func (s *CreateNoteService) renderContent(ctx context.Context, templateName stri
 	var builder strings.Builder
 
 	// Start with metadata comments
-	builder.WriteString("%%%% Metadata\n")
+	builder.WriteString("%% Metadata\n")
 	builder.WriteString(fmt.Sprintf("%% title: %s\n", header.Title))
 	builder.WriteString(fmt.Sprintf("%% date: %s\n", header.Date))
 	if len(header.Tags) > 0 {
 		builder.WriteString(fmt.Sprintf("%% tags: %s\n", strings.Join(header.Tags, ", ")))
+	} else {
+		builder.WriteString("%% tags: \n")
 	}
 	builder.WriteString("\n")
 
