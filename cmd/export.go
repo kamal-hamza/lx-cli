@@ -15,26 +15,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// --- Configuration ---
-
-var exportFormat string
+var (
+	exportFormat    string
+	exportOutputDir string
+)
 
 // ExportProfile defines how to handle different output formats
 type ExportProfile struct {
 	Extension      string
 	PandocArgs     []string
-	AddFrontmatter bool // Should we prepend YAML frontmatter? (obsidian style)
+	AddFrontmatter bool
 }
 
-// Registry of supported formats
 var exportProfiles = map[string]ExportProfile{
 	"markdown": {
 		Extension: "md",
 		PandocArgs: []string{
 			"-f", "latex",
-			"-t", "gfm", // GitHub Flavored Markdown
-			"--wrap=none", // Don't hard wrap lines
-			"--mathjax",   // Preserve math for web/obsidian
+			"-t", "gfm",
+			"--wrap=none",
+			"--mathjax",
 		},
 		AddFrontmatter: true,
 	},
@@ -43,7 +43,7 @@ var exportProfiles = map[string]ExportProfile{
 		PandocArgs: []string{
 			"-f", "latex",
 			"-t", "html",
-			"--standalone", // Full HTML document with <head>
+			"--standalone",
 			"--mathjax",
 		},
 		AddFrontmatter: false,
@@ -59,69 +59,80 @@ var exportProfiles = map[string]ExportProfile{
 }
 
 var exportCmd = &cobra.Command{
-	Use:   "export [output-dir]",
-	Short: "Export vault using Pandoc (Markdown, HTML, Docx)",
-	Long: `Export your notes to other formats using Pandoc with custom Lua filters.
+	Use:   "export",
+	Short: "Export vault using Pandoc",
+	Long: `Export your notes to other formats using Pandoc.
+
+By default, files are exported to the 'exports/' directory in your vault.
+You can specify a custom directory using the --output flag.
 
 Supported Formats:
-  - markdown (Default): Obsidian-compatible with WikiLinks [[...]] and YAML Frontmatter.
-  - html: Standalone HTML5 with MathJax.
-  - docx: Microsoft Word document.
+  - markdown (Default): Obsidian-compatible.
+  - html: Standalone HTML5.
+  - docx: Microsoft Word.
 
 Examples:
-  lx export                   # Export to ./dist (Markdown)
-  lx export -f html ./web     # Export to HTML
-  lx export -f docx ./docs    # Export to Word`,
-	Args: cobra.MaximumNArgs(1),
+  lx export                   # Export to <vault>/exports
+  lx export -o ~/Desktop/dist # Export to custom folder
+  lx export -f docx           # Export as Word docs`,
+	Args: cobra.NoArgs,
 	RunE: runExport,
 }
 
 func init() {
 	exportCmd.Flags().StringVarP(&exportFormat, "format", "f", "markdown", "Output format (markdown, html, docx)")
+	exportCmd.Flags().StringVarP(&exportOutputDir, "output", "o", "", "Custom output directory (default: vault/exports)")
 }
 
 func runExport(cmd *cobra.Command, args []string) error {
 	ctx := getContext()
 
 	// 1. Validate Dependencies
-	if _, err := exec.LookPath("pandoc"); err != nil {
-		return fmt.Errorf("pandoc not found: please install it to use export")
+	if err := checkAndInstallPandoc(); err != nil {
+		return fmt.Errorf("pandoc check failed: %w", err)
 	}
 
 	// 2. Validate Profile
 	profile, ok := exportProfiles[exportFormat]
 	if !ok {
-		return fmt.Errorf("unsupported format: %s (valid: markdown, html, docx)", exportFormat)
+		return fmt.Errorf("unsupported format: %s", exportFormat)
 	}
 
-	// 3. Setup Directories
-	outDir := "dist"
-	if len(args) > 0 {
-		outDir = args[0]
+	// 3. Determine Output Directory
+	outDir := exportOutputDir
+	if outDir == "" {
+		// Default: <vault_root>/exports
+		outDir = filepath.Join(appVault.RootPath, "exports")
 	}
+
+	// Ensure absolute path for clarity in logs
+	if abs, err := filepath.Abs(outDir); err == nil {
+		outDir = abs
+	}
+
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output dir: %w", err)
 	}
 
-	// 4. Create Temporary Lua Filter File
+	// 4. Create Temporary Lua Filter
 	tmpFile, err := os.CreateTemp("", "lx-filter-*.lua")
 	if err != nil {
 		return fmt.Errorf("failed to create temp filter: %w", err)
 	}
 	defer os.Remove(tmpFile.Name())
 
-	// Write the embedded content to the temp file
 	if _, err := tmpFile.WriteString(assets.LinksFilter); err != nil {
 		return err
 	}
 	tmpFile.Close()
-	// 5. Get All Notes
+
+	// 5. Get Notes
 	headers, err := noteRepo.ListHeaders(ctx)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println(ui.FormatRocket(fmt.Sprintf("Exporting %d notes to %s (%s)...", len(headers), outDir, exportFormat)))
+	fmt.Println(ui.FormatRocket(fmt.Sprintf("Exporting %d notes to %s...", len(headers), outDir)))
 
 	// 6. Process Notes
 	success := 0
@@ -145,25 +156,19 @@ func convertNote(h domain.NoteHeader, outDir, filterPath string, profile ExportP
 	srcPath := appVault.GetNotePath(h.Filename)
 	destPath := filepath.Join(outDir, h.Slug+"."+profile.Extension)
 
-	// Build Pandoc Command
-	// Start with profile args
 	args := append([]string{}, profile.PandocArgs...)
-
-	// Add Lua Filter
 	args = append(args, "--lua-filter", filterPath)
 
-	// Add Metadata (Title/Date) for non-markdown formats (HTML/Docx need this for document properties)
+	// Add resource path so Pandoc finds images in assets/
+	args = append(args, "--resource-path", appVault.AssetsPath)
+
 	args = append(args, "--metadata", fmt.Sprintf("title=%s", h.Title))
 	args = append(args, "--metadata", fmt.Sprintf("date=%s", h.Date))
-
-	// Input file
 	args = append(args, srcPath)
 
-	// Execute Pandoc
 	cmd := exec.Command("pandoc", args...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	// cmd.Stderr = os.Stderr // Uncomment for debugging
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("pandoc error: %w", err)
@@ -171,8 +176,6 @@ func convertNote(h domain.NoteHeader, outDir, filterPath string, profile ExportP
 
 	result := out.String()
 
-	// Post-Processing: YAML Frontmatter
-	// Only for Markdown (Obsidian needs this to recognize title/tags)
 	if profile.AddFrontmatter {
 		frontmatter := fmt.Sprintf(`---
 title: "%s"
@@ -182,10 +185,8 @@ tags: [%s]
 ---
 
 `, h.Title, h.Date, h.Slug, strings.Join(h.Tags, ", "))
-
 		result = frontmatter + result
 	}
 
-	// Write Output
 	return os.WriteFile(destPath, []byte(result), 0644)
 }

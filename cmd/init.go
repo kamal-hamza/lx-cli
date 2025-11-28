@@ -84,6 +84,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println(ui.FormatMuted("  notes/      - Your LaTeX notes (.tex files)"))
 	fmt.Println(ui.FormatMuted("  templates/  - Your style files (.sty files)"))
 	fmt.Println(ui.FormatMuted("  cache/      - Compiled PDFs and build artifacts"))
+	fmt.Println(ui.FormatMuted("  assets/      - Static assets (images, bibliographies, etc.)"))
 	fmt.Println()
 	fmt.Println(ui.FormatInfo("Next steps:"))
 	fmt.Println(ui.FormatMuted("  1. Create your first note: lx new \"My First Note\""))

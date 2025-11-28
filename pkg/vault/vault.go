@@ -11,6 +11,7 @@ type Vault struct {
 	RootPath      string
 	NotesPath     string
 	TemplatesPath string
+	AssetsPath    string
 	CachePath     string
 	ConfigPath    string
 }
@@ -30,6 +31,7 @@ func New() (*Vault, error) {
 		RootPath:      rootPath,
 		NotesPath:     filepath.Join(rootPath, "notes"),
 		TemplatesPath: filepath.Join(rootPath, "templates"),
+		AssetsPath:    filepath.Join(rootPath, "assets"),
 		CachePath:     filepath.Join(rootPath, "cache"),
 		ConfigPath:    filepath.Join(configPath),
 	}
@@ -85,6 +87,7 @@ func (v *Vault) Initialize() error {
 		v.RootPath,
 		v.NotesPath,
 		v.TemplatesPath,
+		v.AssetsPath,
 		v.CachePath,
 	}
 
@@ -151,4 +154,9 @@ func (v *Vault) CleanCache() error {
 	}
 
 	return nil
+}
+
+// GetAssetPath returns the full path for an asset file
+func (v *Vault) GetAssetPath(filename string) string {
+	return filepath.Join(v.AssetsPath, filename)
 }
