@@ -59,7 +59,6 @@ func updateTags(query string, tagsInput string, isAdd bool) error {
 		return fmt.Errorf("no notes found matching: %s", query)
 	}
 
-	// Pick the best match (first one)
 	target := resp.Notes[0]
 	path := appVault.GetNotePath(target.Filename)
 
@@ -71,8 +70,9 @@ func updateTags(query string, tagsInput string, isAdd bool) error {
 	content := string(contentBytes)
 
 	// 3. Parse Existing Tags
-	// Regex matches: % tags: tag1, tag2, ...
-	tagRegex := regexp.MustCompile(`(?m)^%\s*tags:\s*(.*)$`)
+	// FIX: Use [ \t]* instead of \s* to avoid consuming newlines!
+	// This ensures we only stay on the current line.
+	tagRegex := regexp.MustCompile(`(?m)^%+\s*tags:[ \t]*(.*)$`)
 	matches := tagRegex.FindStringSubmatch(content)
 
 	var existingTags []string
@@ -132,14 +132,19 @@ func updateTags(query string, tagsInput string, isAdd bool) error {
 	}
 
 	// 5. Write Back
-	newTagLine := fmt.Sprintf("%% tags: %s", strings.Join(existingTags, ", "))
+	newTagLine := fmt.Sprintf("%%%% tags: %s", strings.Join(existingTags, ", "))
 
 	if tagRegex.MatchString(content) {
 		content = tagRegex.ReplaceAllString(content, newTagLine)
 	} else {
-		// If tag line didn't exist, try to insert after date or title
-		// For simplicity, just prepend if missing, or handle strictly
-		// But your file_repository ensures metadata exists, so regex should match.
+		// If tag line is missing, find the date line and append after it
+		dateRegex := regexp.MustCompile(`(?m)^%+\s*date:.*$`)
+		if dateRegex.MatchString(content) {
+			content = dateRegex.ReplaceAllString(content, "$0\n"+newTagLine)
+		} else {
+			// Fallback: Prepend to top
+			content = newTagLine + "\n" + content
+		}
 	}
 
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
