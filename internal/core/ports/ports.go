@@ -1,0 +1,59 @@
+package ports
+
+import (
+	"context"
+	"lx/internal/core/domain"
+)
+
+// Repository defines the port for note persistence operations
+type Repository interface {
+	// ListHeaders returns all note headers (lightweight operation)
+	ListHeaders(ctx context.Context) ([]domain.NoteHeader, error)
+
+	// Save persists a note to storage
+	Save(ctx context.Context, note *domain.NoteBody) error
+
+	// Get retrieves a note by slug
+	Get(ctx context.Context, slug string) (*domain.NoteBody, error)
+
+	// Exists checks if a note with the given slug exists
+	Exists(ctx context.Context, slug string) bool
+
+	// Delete removes a note by slug
+	Delete(ctx context.Context, slug string) error
+}
+
+// TemplateRepository defines the port for template operations
+type TemplateRepository interface {
+	// List returns all available templates
+	List(ctx context.Context) ([]domain.Template, error)
+
+	// Exists checks if a template with the given name exists
+	Exists(ctx context.Context, name string) bool
+
+	// Get retrieves a template by name
+	Get(ctx context.Context, name string) (*domain.Template, error)
+}
+
+// Compiler defines the port for LaTeX compilation operations
+type Compiler interface {
+	// Compile compiles a note to PDF
+	// slug: the note slug to compile
+	// env: additional environment variables (e.g., TEXINPUTS)
+	Compile(ctx context.Context, slug string, env []string) error
+
+	// GetOutputPath returns the path to the compiled PDF
+	GetOutputPath(slug string) string
+}
+
+// EditorLauncher defines the port for launching external editors
+type EditorLauncher interface {
+	// Open opens a file in the user's preferred editor
+	Open(ctx context.Context, filepath string) error
+}
+
+// FileOpener defines the port for opening files with default applications
+type FileOpener interface {
+	// Open opens a file with the system's default application
+	Open(ctx context.Context, filepath string) error
+}
