@@ -82,6 +82,7 @@ func init() {
 	rootCmd.AddCommand(attachCmd)
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(todoCmd)
+	rootCmd.AddCommand(reindexCmd)
 
 	// Global flags can be added here if needed
 }
