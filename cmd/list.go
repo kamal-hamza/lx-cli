@@ -13,19 +13,25 @@ var (
 	listTagFilter string
 	listSortBy    string
 	listReverse   bool
+	listTemplates bool
 )
 
 // listCmd represents the list command
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List all LaTeX notes",
-	Long: `List all LaTeX notes in a table format.
+	Short: "List all LaTeX notes or templates",
+	Long: `List all LaTeX notes in a table format, or list templates.
 
 Examples:
+  # List notes
   lx list
   lx list --tag math
   lx list --sort title
-  lx list --tag science --reverse`,
+  lx list --tag science --reverse
+
+  # List templates
+  lx list -t
+  lx list --template`,
 	RunE: runList,
 }
 
@@ -33,9 +39,20 @@ func init() {
 	listCmd.Flags().StringVar(&listTagFilter, "tag", "", "Filter notes by tag")
 	listCmd.Flags().StringVar(&listSortBy, "sort", "date", "Sort by field (date, title)")
 	listCmd.Flags().BoolVar(&listReverse, "reverse", false, "Reverse sort order")
+	listCmd.Flags().BoolVarP(&listTemplates, "template", "t", false, "List templates instead of notes")
 }
 
 func runList(cmd *cobra.Command, args []string) error {
+	// Check if template flag is set
+	if listTemplates {
+		return runListTemplates(cmd, args)
+	}
+
+	// Otherwise, list notes
+	return runListNotes(cmd, args)
+}
+
+func runListNotes(cmd *cobra.Command, args []string) error {
 	// Execute list service
 	req := services.ListRequest{
 		TagFilter: listTagFilter,
@@ -93,6 +110,34 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	// Print summary
 	fmt.Println(ui.FormatMuted(fmt.Sprintf("Total: %d notes", resp.Total)))
+
+	return nil
+}
+
+func runListTemplates(cmd *cobra.Command, args []string) error {
+	ctx := getContext()
+	templates, err := templateRepo.List(ctx)
+	if err != nil {
+		fmt.Println(ui.FormatError("Failed to list templates"))
+		return err
+	}
+
+	if len(templates) == 0 {
+		fmt.Println(ui.FormatWarning("No templates found"))
+		fmt.Println(ui.FormatInfo("Create a template with: lx new template \"title\""))
+		return nil
+	}
+
+	// Display templates
+	fmt.Println(ui.FormatTitle(fmt.Sprintf("Templates (%d)", len(templates))))
+	fmt.Println()
+
+	for _, template := range templates {
+		fmt.Printf("%s %s\n",
+			ui.StyleAccent.Render("•"),
+			ui.StyleBold.Render(template.Name))
+	}
+	fmt.Println()
 
 	return nil
 }
