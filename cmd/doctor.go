@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 
 	"lx/pkg/ui"
 
@@ -108,6 +109,38 @@ func runDoctor(cmd *cobra.Command, args []string) {
 	// Check pandoc
 	checkStep("pandoc (Export Tool)", func() error {
 		return checkAndInstallPandoc()
+	})
+
+	// Check for broken links
+	checkStep("Link Integrity", func() error {
+		headers, _ := noteRepo.ListHeaders(getContext())
+		slugMap := make(map[string]bool)
+		for _, h := range headers {
+			slugMap[h.Slug] = true
+		}
+
+		brokenCount := 0
+		linkRegex := regexp.MustCompile(`\\ref\{([^}]+)\}`)
+
+		for _, h := range headers {
+			content, _ := os.ReadFile(appVault.GetNotePath(h.Filename))
+			matches := linkRegex.FindAllStringSubmatch(string(content), -1)
+			for _, m := range matches {
+				targetSlug := m[1]
+				if !slugMap[targetSlug] {
+					if brokenCount == 0 {
+						fmt.Println()
+					}
+					fmt.Printf("    %s -> %s (Missing)\n", h.Slug, targetSlug)
+					brokenCount++
+				}
+			}
+		}
+
+		if brokenCount > 0 {
+			return fmt.Errorf("found %d broken links", brokenCount)
+		}
+		return nil
 	})
 }
 
