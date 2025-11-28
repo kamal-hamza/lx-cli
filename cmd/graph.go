@@ -3,356 +3,147 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"sort"
+	"path/filepath"
 
-	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
-	"github.com/spf13/cobra"
-
-	"lx/internal/core/domain"
 	"lx/internal/core/services"
 	"lx/pkg/ui"
-)
 
-var (
-	graphDotFormat bool
-	graphBacklink  bool
-	graphOutgoing  bool
+	"github.com/go-echarts/go-echarts/v2/charts"
+	"github.com/go-echarts/go-echarts/v2/opts"
+	"github.com/go-echarts/go-echarts/v2/types" // <--- ADD THIS IMPORT
+	"github.com/spf13/cobra"
 )
 
 var graphCmd = &cobra.Command{
-	Use:   "graph [query]",
-	Short: "Browse the knowledge graph interactively",
-	Long: `Browse your knowledge graph interactively in the terminal.
+	Use:   "graph",
+	Short: "Generate an interactive knowledge graph",
+	Long: `Analyze your vault and generate a visual graph.
 
-Interactive mode (default):
-  lx graph                         # Browse all notes
-  lx graph "graph-theory"          # Start from a specific note
-
-Generate DOT file for visualization:
-  lx graph --dot > graph.dot
-  dot -Tpng graph.dot -o graph.png
-
-Navigation:
-  ↑↓ or j/k  - Move cursor
-  Enter or l - Open selected note
-  Backspace/h - Go back in history
-  q or Esc   - Quit
-
-The graph is automatically updated before viewing to ensure freshness.`,
-	Args: cobra.MaximumNArgs(1),
+This command forces a fresh scan of your notes to ensure accuracy,
+updates the cache, and produces a 'graph.html' file.`,
 	RunE: runGraph,
 }
 
-func init() {
-	graphCmd.Flags().BoolVar(&graphDotFormat, "dot", false, "Output DOT format instead of interactive mode")
-	graphCmd.Flags().BoolVarP(&graphBacklink, "backlink", "b", false, "Show only backlinks (DOT mode only)")
-	graphCmd.Flags().BoolVarP(&graphOutgoing, "outgoing", "o", false, "Show only outgoing links (DOT mode only)")
-}
-
 func runGraph(cmd *cobra.Command, args []string) error {
-	// If --dot flag is set, use DOT output mode
-	if graphDotFormat {
-		if len(args) > 0 {
-			return runGraphConnections(cmd, args)
-		}
-		return runGraphVisualization(cmd, args)
-	}
-
-	// Default: Interactive mode
-	if len(args) > 0 {
-		return runGraphInteractive(cmd, args)
-	}
-
-	// No query - show all notes interactively
-	return runGraphInteractiveAll(cmd)
-}
-
-func runGraphVisualization(cmd *cobra.Command, args []string) error {
 	ctx := getContext()
 
-	// Generate graph
-	req := services.GenerateRequest{
-		Format: "dot",
-	}
+	fmt.Println(ui.FormatRocket("Analyzing knowledge graph..."))
 
-	resp, err := graphService.Execute(ctx, req)
+	// 1. Initialize Service
+	// FIX: Use correct arguments (Repository, RootPath)
+	graphSvc := services.NewGraphService(noteRepo, appVault.RootPath)
+
+	// 2. Fetch Data
+	data, err := graphSvc.GetGraph(ctx, true)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, ui.FormatError("Failed to generate graph"))
-		return err
+		return fmt.Errorf("failed to generate graph: %w", err)
 	}
 
-	// Output to stdout (can be piped to file)
-	fmt.Print(resp.Output)
-
-	return nil
-}
-
-func runGraphInteractive(cmd *cobra.Command, args []string) error {
-	ctx := getContext()
-	query := args[0]
-
-	// Load or ensure index exists
-	var index *domain.Index
-	var err error
-
-	if !indexerService.IndexExists() {
-		fmt.Println(ui.FormatInfo("Index not found. Building..."))
-		if _, err := indexerService.Execute(ctx, services.ReindexRequest{}); err != nil {
-			return err
-		}
-	}
-
-	index, err = indexerService.LoadIndex()
-	if err != nil {
-		return err
-	}
-
-	// Search for the note
-	searchReq := services.SearchRequest{Query: query}
-	searchResp, err := listService.Search(ctx, searchReq)
-	if err != nil {
-		fmt.Println(ui.FormatError("Failed to search notes"))
-		return err
-	}
-
-	if searchResp.Total == 0 {
-		fmt.Println(ui.FormatWarning("No notes found matching: " + query))
+	if len(data.Nodes) == 0 {
+		fmt.Println(ui.FormatWarning("Graph is empty."))
 		return nil
 	}
 
-	// Select note
-	var selectedNote *domain.NoteHeader
-	if searchResp.Total == 1 {
-		selectedNote = &searchResp.Notes[0]
-	} else {
-		idx, err := fuzzyfinder.Find(
-			searchResp.Notes,
-			func(i int) string {
-				return searchResp.Notes[i].Title
-			},
-			fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
-				if i == -1 {
-					return ""
-				}
-				note := searchResp.Notes[i]
-				entry, exists := index.GetNote(note.Slug)
-				preview := fmt.Sprintf("Title: %s\nSlug: %s\nDate: %s",
-					note.Title, note.Slug, note.GetDisplayDate())
-				if exists {
-					preview += fmt.Sprintf("\n\nConnections: %d",
-						len(entry.Backlinks)+len(entry.OutgoingLinks))
-					preview += fmt.Sprintf("\nBacklinks: %d", len(entry.Backlinks))
-					preview += fmt.Sprintf("\nOutgoing: %d", len(entry.OutgoingLinks))
-				}
-				return preview
-			}),
-		)
-		if err != nil {
-			fmt.Println(ui.FormatInfo("Operation cancelled."))
-			return nil
-		}
-		selectedNote = &searchResp.Notes[idx]
-	}
+	// 3. Prepare Data
+	slugToTitle := make(map[string]string)
+	var echartsNodes []opts.GraphNode
+	var echartsLinks []opts.GraphLink
 
-	// Launch interactive viewer
-	viewer, err := NewInteractiveGraphView(index, selectedNote.Slug)
-	if err != nil {
-		return fmt.Errorf("failed to create viewer: %w", err)
-	}
+	for _, n := range data.Nodes {
+		slugToTitle[n.ID] = n.Title
 
-	return viewer.Run()
-}
-
-func runGraphInteractiveAll(cmd *cobra.Command) error {
-	ctx := getContext()
-
-	// Load or ensure index exists
-	var index *domain.Index
-	var err error
-
-	if !indexerService.IndexExists() {
-		fmt.Println(ui.FormatInfo("Index not found. Building..."))
-		if _, err := indexerService.Execute(ctx, services.ReindexRequest{}); err != nil {
-			return err
-		}
-	}
-
-	index, err = indexerService.LoadIndex()
-	if err != nil {
-		return err
-	}
-
-	// Get all notes sorted by connections
-	type noteWithConnections struct {
-		slug        string
-		title       string
-		connections int
-	}
-
-	var notes []noteWithConnections
-	for slug, entry := range index.Notes {
-		notes = append(notes, noteWithConnections{
-			slug:        slug,
-			title:       entry.Title,
-			connections: len(entry.Backlinks) + len(entry.OutgoingLinks),
+		echartsNodes = append(echartsNodes, opts.GraphNode{
+			Name:       n.Title,
+			Value:      float32(n.Value),
+			SymbolSize: calculateSymbolSize(n.Value),
+			// FIX: Cast string to types.FuncStr
+			Tooltip: &opts.Tooltip{Show: opts.Bool(true), Formatter: types.FuncStr(fmt.Sprintf("{b}<br/>(%s)", n.ID))},
+			// Note: Draggable and Label are controlled by Series options in v2
 		})
 	}
 
-	// Sort by most connected
-	sort.Slice(notes, func(i, j int) bool {
-		return notes[i].connections > notes[j].connections
-	})
+	for _, l := range data.Links {
+		sourceTitle := slugToTitle[l.Source]
+		targetTitle := slugToTitle[l.Target]
 
-	if len(notes) == 0 {
-		fmt.Println(ui.FormatWarning("No notes found in vault"))
-		return nil
+		if sourceTitle != "" && targetTitle != "" {
+			echartsLinks = append(echartsLinks, opts.GraphLink{
+				Source: sourceTitle,
+				Target: targetTitle,
+			})
+		}
 	}
 
-	// Let user pick starting note
-	idx, err := fuzzyfinder.Find(
-		notes,
-		func(i int) string {
-			return fmt.Sprintf("%s (%d connections)", notes[i].title, notes[i].connections)
-		},
-		fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
-			if i == -1 {
-				return ""
-			}
-			note := notes[i]
-			entry, _ := index.GetNote(note.slug)
-			preview := fmt.Sprintf("Title: %s\nSlug: %s\n\nTotal Connections: %d\nBacklinks: %d\nOutgoing: %d",
-				entry.Title, note.slug, note.connections, len(entry.Backlinks), len(entry.OutgoingLinks))
+	// 4. Configure Chart
+	graph := charts.NewGraph()
 
-			if len(entry.Backlinks) > 0 {
-				preview += "\n\nTop Backlinks:"
-				for i, bl := range entry.Backlinks {
-					if i >= 5 {
-						break
-					}
-					blEntry, exists := index.GetNote(bl)
-					if exists {
-						preview += "\n  ← " + blEntry.Title
-					}
-				}
-			}
-
-			return preview
+	graph.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{
+			Title:    "LX Knowledge Graph",
+			Subtitle: fmt.Sprintf("%d Notes • %d Connections", len(data.Nodes), len(data.Links)),
+			Left:     "center",
+		}),
+		// FIX: Use opts.Bool(true)
+		charts.WithTooltipOpts(opts.Tooltip{Show: opts.Bool(true)}),
+		charts.WithInitializationOpts(opts.Initialization{
+			PageTitle: "LX Knowledge Graph",
+			Width:     "100%",
+			Height:    "95vh",
 		}),
 	)
-	if err != nil {
-		fmt.Println(ui.FormatInfo("Operation cancelled."))
-		return nil
-	}
 
-	// Launch interactive viewer
-	viewer, err := NewInteractiveGraphView(index, notes[idx].slug)
-	if err != nil {
-		return fmt.Errorf("failed to create viewer: %w", err)
-	}
-
-	return viewer.Run()
-}
-
-func runGraphConnections(cmd *cobra.Command, args []string) error {
-	ctx := getContext()
-	query := args[0]
-
-	// Search for the note
-	searchReq := services.SearchRequest{
-		Query: query,
-	}
-
-	searchResp, err := listService.Search(ctx, searchReq)
-	if err != nil {
-		fmt.Println(ui.FormatError("Failed to search notes"))
-		return err
-	}
-
-	if searchResp.Total == 0 {
-		fmt.Println(ui.FormatWarning("No notes found matching: " + query))
-		return nil
-	}
-
-	// Select note
-	var selectedNote *domain.NoteHeader
-	if searchResp.Total == 1 {
-		selectedNote = &searchResp.Notes[0]
-	} else {
-		// Use fuzzy finder for selection
-		idx, err := fuzzyfinder.Find(
-			searchResp.Notes,
-			func(i int) string {
-				return searchResp.Notes[i].Title
-			},
-			fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
-				if i == -1 {
-					return ""
-				}
-				note := searchResp.Notes[i]
-				return fmt.Sprintf("Title: %s\nSlug: %s\nDate: %s",
-					note.Title,
-					note.Slug,
-					note.GetDisplayDate())
+	graph.AddSeries("notes", echartsNodes, echartsLinks).
+		SetSeriesOptions(
+			charts.WithGraphChartOpts(opts.GraphChart{
+				Layout:             "force",
+				Roam:               opts.Bool(true), // FIX: opts.Bool
+				FocusNodeAdjacency: opts.Bool(true), // FIX: opts.Bool
+				Force: &opts.GraphForce{
+					Repulsion:  800,
+					Gravity:    0.05,
+					EdgeLength: 150,
+					InitLayout: "circular",
+				},
+				Draggable: opts.Bool(true), // FIX: Draggable goes here in Series options
+			}),
+			charts.WithLabelOpts(opts.Label{
+				Show:     opts.Bool(true), // FIX: opts.Bool
+				Color:    "black",
+				Position: "right",
+			}),
+			charts.WithLineStyleOpts(opts.LineStyle{
+				Color:     "source",
+				Curveness: 0.2,             // Curveness usually accepts float direct, if error persists use opts.Float(0.2)
+				Opacity:   opts.Float(0.6), // Opacity usually accepts float direct
 			}),
 		)
-		if err != nil {
-			fmt.Println(ui.FormatInfo("Operation cancelled."))
-			return nil
-		}
-		selectedNote = &searchResp.Notes[idx]
+
+	// 5. Render
+	outputPath := filepath.Join(appVault.RootPath, "graph.html")
+	f, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create graph file: %w", err)
+	}
+	defer f.Close()
+
+	if err := graph.Render(f); err != nil {
+		return fmt.Errorf("failed to render graph: %w", err)
 	}
 
-	// Get connections
-	var backlinks []string
-	var outgoingLinks []string
-
-	if !graphOutgoing {
-		backlinks, err = graphService.GetBacklinks(ctx, selectedNote.Slug)
-		if err != nil {
-			return err
-		}
-	}
-
-	if !graphBacklink {
-		outgoingLinks, err = graphService.GetOutgoingLinks(ctx, selectedNote.Slug)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Display results
-	fmt.Println(ui.FormatTitle("Connections for: " + selectedNote.Title))
 	fmt.Println()
+	fmt.Println(ui.FormatSuccess("Graph generated successfully!"))
+	fmt.Println(ui.RenderKeyValue("Location", outputPath))
 
-	if !graphOutgoing {
-		fmt.Println(ui.StyleHeader.Render("← Backlinks") + ui.StyleMuted.Render(fmt.Sprintf(" (%d)", len(backlinks))))
-		if len(backlinks) == 0 {
-			fmt.Println(ui.FormatMuted("  No notes link to this note"))
-		} else {
-			for _, slug := range backlinks {
-				fmt.Printf("  %s %s\n", ui.StyleAccent.Render("←"), slug)
-			}
-		}
-		fmt.Println()
+	fmt.Println(ui.FormatInfo("Opening in browser..."))
+	return OpenFileWithDefaultApp(outputPath)
+}
+
+func calculateSymbolSize(connections int) float32 {
+	base := float32(20.0)
+	cap := float32(100.0)
+	size := base + (float32(connections) * 3.0)
+	if size > cap {
+		return cap
 	}
-
-	if !graphBacklink {
-		fmt.Println(ui.StyleHeader.Render("→ Outgoing Links") + ui.StyleMuted.Render(fmt.Sprintf(" (%d)", len(outgoingLinks))))
-		if len(outgoingLinks) == 0 {
-			fmt.Println(ui.FormatMuted("  This note doesn't link to others"))
-		} else {
-			for _, slug := range outgoingLinks {
-				fmt.Printf("  %s %s\n", ui.StyleAccent.Render("→"), slug)
-			}
-		}
-		fmt.Println()
-	}
-
-	// Show quick stats
-	totalConnections := len(backlinks) + len(outgoingLinks)
-	if totalConnections > 0 {
-		fmt.Println(ui.FormatMuted(fmt.Sprintf("Total connections: %d", totalConnections)))
-	}
-
-	return nil
+	return size
 }

@@ -77,6 +77,7 @@ func init() {
 	rootCmd.AddCommand(grepCmd)
 	rootCmd.AddCommand(dailyCmd)
 	rootCmd.AddCommand(linksCmd)
+	rootCmd.AddCommand(exploreCmd)
 
 	// Global flags can be added here if needed
 }
@@ -124,7 +125,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	buildService = services.NewBuildService(noteRepo, latexCompiler)
 	listService = services.NewListService(noteRepo)
 	indexerService = services.NewIndexerService(noteRepo, appVault.IndexPath())
-	graphService = services.NewGraphService(indexerService)
+	graphService = services.NewGraphService(noteRepo, appVault.RootPath)
 	grepService = services.NewGrepService(appVault.RootPath)
 
 	return nil

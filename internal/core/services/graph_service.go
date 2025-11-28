@@ -1,137 +1,214 @@
 package services
 
 import (
+	"bufio"
 	"context"
-	"fmt"
+	"encoding/json"
+	"io"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	"lx/internal/core/domain"
+	"lx/internal/core/ports"
 )
 
-// GraphService handles graph visualization operations
 type GraphService struct {
-	indexer *IndexerService
+	noteRepo  ports.Repository
+	vaultRoot string
+	cachePath string
 }
 
-// NewGraphService creates a new graph service
-func NewGraphService(indexer *IndexerService) *GraphService {
+func NewGraphService(noteRepo ports.Repository, vaultRoot string) *GraphService {
 	return &GraphService{
-		indexer: indexer,
+		noteRepo:  noteRepo,
+		vaultRoot: vaultRoot,
+		cachePath: filepath.Join(vaultRoot, "cache", "graph_cache.json"),
 	}
 }
 
-// GenerateRequest represents a request to generate a graph
-type GenerateRequest struct {
-	Format string // "dot" (default), future: "json", "mermaid"
+// Data Structures
+type GraphData struct {
+	Nodes []GraphNode `json:"nodes"`
+	Links []GraphLink `json:"links"`
 }
 
-// GenerateResponse represents the response from graph generation
-type GenerateResponse struct {
-	Format string
-	Output string
+type GraphNode struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Group int    `json:"group"`
+	Value int    `json:"val"`
 }
 
-// Execute generates a graph visualization
-func (s *GraphService) Execute(ctx context.Context, req GenerateRequest) (*GenerateResponse, error) {
-	// Load or reindex if needed
-	index, err := s.ensureIndex(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load index: %w", err)
-	}
-
-	// Default to DOT format
-	format := req.Format
-	if format == "" {
-		format = "dot"
-	}
-
-	var output string
-	switch format {
-	case "dot":
-		output = s.generateDOT(index)
-	default:
-		return nil, fmt.Errorf("unsupported format: %s", format)
-	}
-
-	return &GenerateResponse{
-		Format: format,
-		Output: output,
-	}, nil
+type GraphLink struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+	Value  int    `json:"value"`
 }
 
-// ensureIndex loads the index or triggers a reindex if it doesn't exist
-func (s *GraphService) ensureIndex(ctx context.Context) (*domain.Index, error) {
-	if !s.indexer.IndexExists() {
-		// Trigger reindex
-		if _, err := s.indexer.Execute(ctx, ReindexRequest{}); err != nil {
-			return nil, fmt.Errorf("failed to reindex: %w", err)
-		}
-	}
-
-	return s.indexer.LoadIndex()
-}
-
-// generateDOT generates a Graphviz DOT format representation
-func (s *GraphService) generateDOT(index *domain.Index) string {
-	var builder strings.Builder
-
-	// Header
-	builder.WriteString("digraph G {\n")
-	builder.WriteString("  rankdir=LR;\n")
-	builder.WriteString("  node [shape=box, style=rounded];\n")
-	builder.WriteString("\n")
-
-	// Add nodes with labels
-	for slug, entry := range index.Notes {
-		// Escape quotes in title
-		title := strings.ReplaceAll(entry.Title, "\"", "\\\"")
-		builder.WriteString(fmt.Sprintf("  \"%s\" [label=\"%s\"];\n", slug, title))
-	}
-
-	builder.WriteString("\n")
-
-	// Add edges (connections)
-	for sourceSlug, entry := range index.Notes {
-		for _, targetSlug := range entry.OutgoingLinks {
-			// Only add edge if target exists in the index
-			if index.HasNote(targetSlug) {
-				builder.WriteString(fmt.Sprintf("  \"%s\" -> \"%s\";\n", sourceSlug, targetSlug))
+// GetGraph retrieves the graph, using cache if available
+func (s *GraphService) GetGraph(ctx context.Context, forceRefresh bool) (GraphData, error) {
+	// 1. Try Cache
+	if !forceRefresh {
+		if info, err := os.Stat(s.cachePath); err == nil {
+			// Cache valid for 24 hours
+			if time.Since(info.ModTime()) < 24*time.Hour {
+				data, err := s.loadFromCache()
+				if err == nil {
+					return data, nil
+				}
 			}
 		}
 	}
 
-	// Footer
-	builder.WriteString("}\n")
+	// 2. Generate Fresh
+	data, err := s.Generate(ctx)
+	if err != nil {
+		return GraphData{}, err
+	}
 
-	return builder.String()
+	// 3. Save Cache (Async)
+	go s.saveToCache(data)
+
+	return data, nil
 }
 
-// GetBacklinks returns all notes that link to the specified slug
-func (s *GraphService) GetBacklinks(ctx context.Context, slug string) ([]string, error) {
-	index, err := s.ensureIndex(ctx)
+// Generate builds the graph using O(N) Tokenization
+func (s *GraphService) Generate(ctx context.Context) (GraphData, error) {
+	// 1. Get Headers & Build Lookup Map
+	headers, err := s.noteRepo.ListHeaders(ctx)
 	if err != nil {
-		return nil, err
+		return GraphData{}, err
 	}
 
-	entry, exists := index.GetNote(slug)
-	if !exists {
-		return []string{}, nil
+	nodes := make([]GraphNode, 0, len(headers))
+	slugMap := make(map[string]bool)
+
+	for _, h := range headers {
+		slugMap[h.Slug] = true
+		nodes = append(nodes, GraphNode{
+			ID:    h.Slug,
+			Title: h.Title,
+			Group: 1,
+			Value: 1,
+		})
 	}
 
-	return entry.Backlinks, nil
+	// 2. Scan Files Concurrently
+	var links []GraphLink
+	var mu sync.Mutex // Protects links slice
+	var wg sync.WaitGroup
+
+	// Semaphore to limit concurrency to CPU count (prevents I/O choking)
+	semaphore := make(chan struct{}, runtime.NumCPU())
+
+	for _, h := range headers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Acquire token
+
+		go func(src domain.NoteHeader) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Release token
+
+			path := filepath.Join(s.vaultRoot, "notes", src.Filename)
+			file, err := os.Open(path)
+			if err != nil {
+				return
+			}
+			defer file.Close()
+
+			// --- THE OPTIMIZATION IS HERE ---
+			// We scan the file once, tokenizing words, and checking the map.
+			foundSlugs := s.findMentions(file, slugMap)
+
+			if len(foundSlugs) > 0 {
+				mu.Lock()
+				for target := range foundSlugs {
+					if target != src.Slug { // Ignore self-references
+						links = append(links, GraphLink{
+							Source: src.Slug,
+							Target: target,
+							Value:  1,
+						})
+					}
+				}
+				mu.Unlock()
+			}
+		}(h)
+	}
+
+	wg.Wait()
+
+	return GraphData{
+		Nodes: nodes,
+		Links: links,
+	}, nil
 }
 
-// GetOutgoingLinks returns all notes that the specified slug links to
-func (s *GraphService) GetOutgoingLinks(ctx context.Context, slug string) ([]string, error) {
-	index, err := s.ensureIndex(ctx)
+// findMentions tokenizes the stream and looks up slugs in O(1)
+func (s *GraphService) findMentions(r io.Reader, validSlugs map[string]bool) map[string]bool {
+	found := make(map[string]bool)
+	scanner := bufio.NewScanner(r)
+
+	// Custom Split Function:
+	// Isolate "slug-like" tokens (alphanumeric + hyphens)
+	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+		start := 0
+		// Skip non-slug characters
+		for start < len(data) && !isSlugChar(rune(data[start])) {
+			start++
+		}
+		if start >= len(data) {
+			return start, nil, nil
+		}
+
+		// Find end of token
+		end := start
+		for end < len(data) && isSlugChar(rune(data[end])) {
+			end++
+		}
+
+		if end < len(data) || atEOF {
+			return end, data[start:end], nil
+		}
+		return 0, nil, nil
+	})
+
+	for scanner.Scan() {
+		word := strings.ToLower(scanner.Text())
+		// O(1) Lookup
+		if validSlugs[word] {
+			found[word] = true
+		}
+	}
+
+	return found
+}
+
+// isSlugChar defines valid slug characters
+func isSlugChar(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-'
+}
+
+func (s *GraphService) loadFromCache() (GraphData, error) {
+	file, err := os.Open(s.cachePath)
 	if err != nil {
-		return nil, err
+		return GraphData{}, err
 	}
+	defer file.Close()
+	var data GraphData
+	err = json.NewDecoder(file).Decode(&data)
+	return data, err
+}
 
-	entry, exists := index.GetNote(slug)
-	if !exists {
-		return []string{}, nil
+func (s *GraphService) saveToCache(data GraphData) {
+	file, err := os.Create(s.cachePath)
+	if err != nil {
+		return
 	}
-
-	return entry.OutgoingLinks, nil
+	defer file.Close()
+	json.NewEncoder(file).Encode(data)
 }
