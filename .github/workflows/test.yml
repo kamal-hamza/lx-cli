@@ -17,6 +17,11 @@ jobs:
               with:
                   go-version: stable
 
+            - name: Download Dependencies and Tidy
+              run: |
+                  go mod tidy
+                  go mod download
+
             - name: Build
               run: go build -v ./...
 

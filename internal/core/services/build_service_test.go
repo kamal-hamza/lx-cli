@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"lx/internal/core/domain"
-	"lx/internal/core/ports/mocks"
+	"github.com/kamal-hamza/lx-cli/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/internal/core/ports/mocks"
 )
 
 func TestBuildService_Execute_Success(t *testing.T) {

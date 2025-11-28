@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"lx/internal/core/domain"
-	"lx/internal/core/ports"
+	"github.com/kamal-hamza/lx-cli/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/internal/core/ports"
 )
 
 type CreateTemplateService struct {

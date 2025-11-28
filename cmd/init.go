@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"lx/pkg/ui"
-	"lx/pkg/vault"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 // initCmd represents the init command

@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"lx/pkg/ui"
+	"github.com/kamal-hamza/lx-cli/pkg/ui"
 	"os"
 	"os/exec"
 

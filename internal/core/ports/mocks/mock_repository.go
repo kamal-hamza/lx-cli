@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"lx/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 )
 
 // MockRepository is a mock implementation of the Repository interface for testing

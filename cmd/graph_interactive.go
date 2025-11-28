@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"lx/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 
 	"github.com/gdamore/tcell/v2"
 )

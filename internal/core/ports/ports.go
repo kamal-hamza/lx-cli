@@ -2,7 +2,7 @@ package ports
 
 import (
 	"context"
-	"lx/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 )
 
 // Repository defines the port for note persistence operations

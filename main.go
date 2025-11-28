@@ -1,7 +1,7 @@
 package main
 
 import (
-	"lx/cmd"
+	"github.com/kamal-hamza/lx-cli/cmd"
 )
 
 func main() {

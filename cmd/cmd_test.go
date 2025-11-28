@@ -3,8 +3,8 @@ package cmd
 import (
 	"testing"
 
-	"lx/internal/core/ports/mocks"
-	"lx/internal/core/services"
+	"github.com/kamal-hamza/lx-cli/internal/core/ports/mocks"
+	"github.com/kamal-hamza/lx-cli/internal/core/services"
 )
 
 // TestCommandStructure verifies that all commands are properly registered
