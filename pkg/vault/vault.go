@@ -131,6 +131,11 @@ func (v *Vault) GetTemplatePath(filename string) string {
 	return filepath.Join(v.TemplatesPath, filename)
 }
 
+// IndexPath returns the path to the graph index file
+func (v *Vault) IndexPath() string {
+	return filepath.Join(v.CachePath, "index.json")
+}
+
 // CleanCache removes all files in the cache directory
 func (v *Vault) CleanCache() error {
 	entries, err := os.ReadDir(v.CachePath)
