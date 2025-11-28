@@ -1,0 +1,43 @@
+project_name: lx
+
+builds:
+    - env: [CGO_ENABLED=0]
+      goos: [linux, windows, darwin]
+      goarch: [amd64, arm64]
+
+archives:
+    - format: tar.gz
+      format_overrides:
+          - goos: windows
+            format: zip
+      name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+# 1. macOS: Push Formula to 'Formula/' folder in THIS repo
+brews:
+    - repository:
+          owner: kamal-hamza
+          name: lx-cli # Your main repo
+          token: "{{ .Env.GITHUB_TOKEN }}" # Use standard token
+      directory: Formula
+      homepage: "https://github.com/kamal-hamza/lx-cli"
+      description: "A beautiful LaTeX notes manager"
+
+# 2. Windows: Push Manifest to 'scoop/' folder in THIS repo
+scoops:
+    - repository:
+          owner: kamal-hamza
+          name: lx-cli # Your main repo
+          token: "{{ .Env.GITHUB_TOKEN }}"
+      directory: scoop
+      homepage: "https://github.com/kamal-hamza/lx-cli"
+      description: "A beautiful LaTeX notes manager"
+
+# 3. Linux: Attach .deb/.rpm to Release (No repo needed)
+nfpms:
+    - file_name_template: "{{ .ProjectName }}_{{ .Arch }}"
+      homepage: "https://github.com/kamal-hamza/lx-cli"
+      maintainer: "Kamal <you@example.com>"
+      formats: [deb, rpm]
+
+checksum:
+    name_template: "checksums.txt"

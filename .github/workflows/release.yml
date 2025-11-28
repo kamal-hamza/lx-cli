@@ -1,0 +1,38 @@
+name: goreleaser
+
+on:
+    push:
+        # Run only when a new tag starting with 'v' is pushed
+        tags:
+            - "v*"
+
+permissions:
+    contents: write # Needed to create the Release and upload artifacts
+
+jobs:
+    goreleaser:
+        runs-on: ubuntu-latest
+        steps:
+            # 1. Checkout code with full history (crucial for Changelog generation)
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            # 2. Install Go
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: stable
+
+            # 3. Run GoReleaser
+            - name: Run GoReleaser
+              uses: goreleaser/goreleaser-action@v6
+              with:
+                  distribution: goreleaser
+                  version: latest
+                  args: release --clean
+              env:
+                  # Critical: Use your PAT so GoReleaser can push the Homebrew/Scoop
+                  # files back to your repo (bypassing branch protection if needed).
+                  GITHUB_TOKEN: ${{ secrets.GH_PAT }}
