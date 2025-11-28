@@ -76,6 +76,7 @@ func init() {
 	rootCmd.AddCommand(graphCmd)
 	rootCmd.AddCommand(grepCmd)
 	rootCmd.AddCommand(dailyCmd)
+	rootCmd.AddCommand(linksCmd)
 
 	// Global flags can be added here if needed
 }
