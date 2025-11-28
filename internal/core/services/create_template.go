@@ -32,8 +32,8 @@ type CreateTemplateResponse struct {
 // Execute creates a new template with the given parameters
 func (s *CreateTemplateService) Execute(ctx context.Context, req CreateTemplateRequest) (*CreateTemplateResponse, error) {
 	// Validate title
-	if req.Title == "" {
-		return nil, fmt.Errorf("template title cannot be empty")
+	if err := domain.ValidateTemplate(req.Title); err != nil {
+		return nil, fmt.Errorf("invalid template title: %w", err)
 	}
 
 	// Generate slug from title

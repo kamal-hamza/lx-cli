@@ -132,6 +132,9 @@ func (s *IndexerService) extractLinks(content string, sourceSlug string) []strin
 //   - "graph-theory.tex" -> "graph-theory"
 //   - "graph-theory" -> "graph-theory"
 func (s *IndexerService) normalizeLink(link string) string {
+	// Convert backslashes to forward slashes for Windows compatibility
+	link = strings.ReplaceAll(link, "\\", "/")
+
 	// Remove path components
 	link = filepath.Base(link)
 

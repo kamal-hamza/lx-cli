@@ -247,3 +247,66 @@ func (r *FileRepository) FindByQuery(ctx context.Context, query string) ([]domai
 
 	return matches, nil
 }
+
+// Rename renames a note from oldSlug to newTitle
+func (r *FileRepository) Rename(ctx context.Context, oldSlug string, newTitle string) error {
+	// Validate new title
+	if err := domain.ValidateTitle(newTitle); err != nil {
+		return fmt.Errorf("invalid title: %w", err)
+	}
+
+	// Find the old file
+	oldFilename, err := r.findFileBySlug(oldSlug)
+	if err != nil {
+		return fmt.Errorf("note not found: %w", err)
+	}
+
+	// Generate new slug and filename
+	newSlug := domain.GenerateSlug(newTitle)
+
+	// Check if new slug already exists
+	if r.Exists(ctx, newSlug) && newSlug != oldSlug {
+		return fmt.Errorf("note with slug '%s' already exists", newSlug)
+	}
+
+	// Preserve date prefix if present
+	newFilename := domain.GenerateFilename(newSlug)
+	if strings.Contains(oldFilename, "-") {
+		parts := strings.SplitN(oldFilename, "-", 2)
+		if len(parts) == 2 && len(parts[0]) == 8 { // YYYYMMDD check
+			newFilename = parts[0] + "-" + newSlug + ".tex"
+		}
+	}
+
+	oldPath := r.vault.GetNotePath(oldFilename)
+	newPath := r.vault.GetNotePath(newFilename)
+
+	// Read and update content
+	contentBytes, err := os.ReadFile(oldPath)
+	if err != nil {
+		return fmt.Errorf("failed to read note: %w", err)
+	}
+
+	content := string(contentBytes)
+
+	// Update title in metadata
+	titleRegex := regexp.MustCompile(`(?m)^%+\s*title:.*$`)
+	content = titleRegex.ReplaceAllString(content, fmt.Sprintf("%%%% title: %s", newTitle))
+
+	// Write updated content to old path first
+	if err := os.WriteFile(oldPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to update note content: %w", err)
+	}
+
+	// Rename the file
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return fmt.Errorf("failed to rename file: %w", err)
+	}
+
+	return nil
+}
+
+// List returns all notes (full bodies)
+func (r *FileRepository) List(ctx context.Context) ([]domain.NoteHeader, error) {
+	return r.ListHeaders(ctx)
+}

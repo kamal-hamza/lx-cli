@@ -21,12 +21,12 @@ func GenerateTemplateSlug(title string) string {
 	// Convert to lowercase
 	slug := strings.ToLower(title)
 
-	// Replace spaces and special characters with hyphens
-	reg := regexp.MustCompile(`[^a-z0-9]+`)
+	// Replace spaces and special characters with hyphens, but preserve underscores and hyphens
+	reg := regexp.MustCompile(`[^a-z0-9_-]+`)
 	slug = reg.ReplaceAllString(slug, "-")
 
-	// Remove leading/trailing hyphens
-	slug = strings.Trim(slug, "-")
+	// Remove leading/trailing hyphens and underscores
+	slug = strings.Trim(slug, "-_")
 
 	// Collapse multiple hyphens
 	reg = regexp.MustCompile(`-+`)
