@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"lx/pkg/ui"
 
@@ -94,6 +95,15 @@ func runDoctor(cmd *cobra.Command, args []string) {
 
 	fmt.Println()
 	fmt.Println(ui.FormatInfo("Diagnosis complete."))
+
+	// Check .latexmkrc file
+	checkStep("Editor Config (.latexmkrc)", func() error {
+		path := filepath.Join(appVault.NotesPath, ".latexmkrc")
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return fmt.Errorf("missing (your editor might clutter the notes folder)")
+		}
+		return nil
+	})
 }
 
 // checkStep runs a check function and prints the result nicely

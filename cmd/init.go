@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -54,6 +55,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 		// Don't fail - config is optional
 	}
 
+	// Create .latexmkrc file
+	if err := createLatexmkrc(v); err != nil {
+		fmt.Println(ui.FormatWarning("Failed to create .latexmkrc: " + err.Error()))
+	} else {
+		fmt.Println(ui.FormatSuccess("Editor config (.latexmkrc) created"))
+	}
+
 	// Success message
 	fmt.Println(ui.FormatSuccess("Vault initialized successfully!"))
 	fmt.Println()
@@ -87,5 +95,34 @@ func createDefaultConfig(v *vault.Vault) error {
 # max_workers: 4
 `
 
+	configDir := filepath.Dir(v.ConfigPath)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
 	return os.WriteFile(v.ConfigPath, []byte(defaultConfig), 0644)
+}
+
+func createLatexmkrc(v *vault.Vault) error {
+	// This file tells your editor (VS Code, VimTeX, etc.) to:
+	// 1. Output all build files to ../cache
+	// 2. Look in ../templates for .sty files
+	content := `# LX Editor Configuration
+# This ensures your editor uses the shared cache and templates.
+
+$out_dir = '../cache';
+$pdf_mode = 1;
+
+# Add templates folder to TEXINPUTS (recursively)
+my $templates_path = '../templates//';
+
+if ($^O eq 'MSWin32') {
+    $ENV{'TEXINPUTS'} = $templates_path . ';' . $ENV{'TEXINPUTS'};
+} else {
+    $ENV{'TEXINPUTS'} = $templates_path . ':' . $ENV{'TEXINPUTS'};
+}
+`
+	// We place this INSIDE the notes folder because that is where the editor runs latexmk
+	path := filepath.Join(v.NotesPath, ".latexmkrc")
+	return os.WriteFile(path, []byte(content), 0644)
 }
