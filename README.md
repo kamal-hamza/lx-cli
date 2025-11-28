@@ -253,6 +253,8 @@ dot -Tpng graph.dot -o graph.png
 
 ## Important Files
 
+- `LICENSE` - MIT License file
+- `README.md` - This file
 - `config.sample.yaml` - Sample configuration file with all available options
 - `.latexmkrc` - LaTeX compilation settings (auto-generated in notes directory)
 - `.gitignore` - Git ignore patterns (auto-generated in vault root)
@@ -300,7 +302,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-[Your License Here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
