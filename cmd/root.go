@@ -25,6 +25,7 @@ var (
 	listService           *services.ListService
 	indexerService        *services.IndexerService
 	graphService          *services.GraphService
+	grepService           *services.GrepService
 
 	// Repositories
 	noteRepo     *repository.FileRepository
@@ -73,6 +74,7 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(tagCmd)
 	rootCmd.AddCommand(graphCmd)
+	rootCmd.AddCommand(grepCmd)
 
 	// Global flags can be added here if needed
 }
@@ -121,6 +123,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	listService = services.NewListService(noteRepo)
 	indexerService = services.NewIndexerService(noteRepo, appVault.IndexPath())
 	graphService = services.NewGraphService(indexerService)
+	grepService = services.NewGrepService(appVault.RootPath)
 
 	return nil
 }
