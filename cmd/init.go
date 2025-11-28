@@ -62,6 +62,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Println(ui.FormatSuccess("Editor config (.latexmkrc) created"))
 	}
 
+	// Create .gitignore file
+	if err := createGitignore(v); err != nil {
+		fmt.Println(ui.FormatWarning("Failed to create .gitignore: " + err.Error()))
+	} else {
+		fmt.Println(ui.FormatSuccess("Git ignore file (.gitignore) created"))
+	}
+
 	// Success message
 	fmt.Println(ui.FormatSuccess("Vault initialized successfully!"))
 	fmt.Println()
@@ -124,5 +131,42 @@ if ($^O eq 'MSWin32') {
 `
 	// We place this INSIDE the notes folder because that is where the editor runs latexmk
 	path := filepath.Join(v.NotesPath, ".latexmkrc")
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
+func createGitignore(v *vault.Vault) error {
+	// Ignore cache, OS files, and common editor configs
+	content := `# LX Vault
+cache/
+dist/
+build/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.bak
+
+# LaTeX generated files (in case they leak out of cache)
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+`
+	path := filepath.Join(v.RootPath, ".gitignore")
 	return os.WriteFile(path, []byte(content), 0644)
 }
