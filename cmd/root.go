@@ -23,6 +23,8 @@ var (
 	createTemplateService *services.CreateTemplateService
 	buildService          *services.BuildService
 	listService           *services.ListService
+	indexerService        *services.IndexerService
+	graphService          *services.GraphService
 
 	// Repositories
 	noteRepo     *repository.FileRepository
@@ -70,6 +72,7 @@ func init() {
 	rootCmd.AddCommand(cleanCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(tagCmd)
+	rootCmd.AddCommand(graphCmd)
 
 	// Global flags can be added here if needed
 }
@@ -116,6 +119,8 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	createTemplateService = services.NewCreateTemplateService(templateRepo)
 	buildService = services.NewBuildService(noteRepo, latexCompiler)
 	listService = services.NewListService(noteRepo)
+	indexerService = services.NewIndexerService(noteRepo, appVault.IndexPath())
+	graphService = services.NewGraphService(indexerService)
 
 	return nil
 }
