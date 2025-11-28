@@ -64,6 +64,7 @@ func init() {
 	rootCmd.AddCommand(gitCmd)
 	rootCmd.AddCommand(cloneCmd)
 	rootCmd.AddCommand(syncCmd)
+	rootCmd.AddCommand(renameCmd)
 
 	// Global flags can be added here if needed
 }
