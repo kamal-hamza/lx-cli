@@ -1,19 +1,19 @@
 {
-    "version": "0.1.1",
+    "version": "0.1.2",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.1/lx_0.1.1_windows_amd64.zip",
+            "url": "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.2/lx_0.1.2_windows_amd64.zip",
             "bin": [
                 "lx.exe"
             ],
-            "hash": "303937a6fac43804186d164f87f79e1b3f2a0f60c2de31635dac80ec8117f94e"
+            "hash": "d85af68515661f53d06afc946895f6a72b2d3578a9fcd4fad4c46c9879d6669d"
         },
         "arm64": {
-            "url": "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.1/lx_0.1.1_windows_arm64.zip",
+            "url": "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.2/lx_0.1.2_windows_arm64.zip",
             "bin": [
                 "lx.exe"
             ],
-            "hash": "c3634a35560e18d589aa4efe35bdf9738e0e50f41826952e886892cc8a62067f"
+            "hash": "dd47572db3b62dba30d91bfc3b0f53170553340b368b800d47339dd39473955c"
         }
     },
     "homepage": "https://github.com/kamal-hamza/lx-cli",
