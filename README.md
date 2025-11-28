@@ -299,6 +299,7 @@ make clean
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+Note: This is a personal project that I created for my own use. You’re welcome to fork the repository and modify it however you like, but I won’t be accepting pull requests. I’m sharing the project publicly in case it’s useful to others.
 
 ## License
 
