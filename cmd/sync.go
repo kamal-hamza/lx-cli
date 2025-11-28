@@ -18,10 +18,6 @@ var syncCmd = &cobra.Command{
 	RunE:  runSync,
 }
 
-func init() {
-	rootCmd.AddCommand(syncCmd)
-}
-
 func runSync(cmd *cobra.Command, args []string) error {
 	fmt.Println(ui.FormatInfo("Syncing vault..."))
 	fmt.Println()

@@ -67,6 +67,9 @@ func init() {
 	rootCmd.AddCommand(renameCmd)
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(statsCmd)
+	rootCmd.AddCommand(cleanCmd)
+	rootCmd.AddCommand(configCmd)
+	rootCmd.AddCommand(tagCmd)
 
 	// Global flags can be added here if needed
 }

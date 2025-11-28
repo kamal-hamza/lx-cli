@@ -41,7 +41,6 @@ Examples:
 
 func init() {
 	renameCmd.Flags().BoolVarP(&renameTemplate, "template", "t", false, "Rename a template instead of a note")
-	rootCmd.AddCommand(renameCmd)
 }
 
 func runRename(cmd *cobra.Command, args []string) error {
