@@ -1,0 +1,21 @@
+{
+    "version": "0.1.0",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.0/lx_0.1.0_windows_amd64.zip",
+            "bin": [
+                "lx.exe"
+            ],
+            "hash": "6cad05b679c91d149f6d58c75a61dedea6a861ed73a7e64589e64aaf563c4a07"
+        },
+        "arm64": {
+            "url": "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.0/lx_0.1.0_windows_arm64.zip",
+            "bin": [
+                "lx.exe"
+            ],
+            "hash": "979f892223067665d37a3455e365af82dc00560cc26d1acd585b848b93e07a09"
+        }
+    },
+    "homepage": "https://github.com/kamal-hamza/lx-cli",
+    "description": "A beautiful LaTeX notes manager"
+}
