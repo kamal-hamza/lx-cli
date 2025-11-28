@@ -19,9 +19,10 @@ var (
 	appVault *vault.Vault
 
 	// Services
-	createNoteService *services.CreateNoteService
-	buildService      *services.BuildService
-	listService       *services.ListService
+	createNoteService     *services.CreateNoteService
+	createTemplateService *services.CreateTemplateService
+	buildService          *services.BuildService
+	listService           *services.ListService
 
 	// Repositories
 	noteRepo     *repository.FileRepository
@@ -101,6 +102,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 
 	// Initialize services
 	createNoteService = services.NewCreateNoteService(noteRepo, templateRepo)
+	createTemplateService = services.NewCreateTemplateService(templateRepo)
 	buildService = services.NewBuildService(noteRepo, latexCompiler)
 	listService = services.NewListService(noteRepo)
 

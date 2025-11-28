@@ -33,6 +33,9 @@ type TemplateRepository interface {
 
 	// Get retrieves a template by name
 	Get(ctx context.Context, name string) (*domain.Template, error)
+
+	// Create creates a new template
+	Create(ctx context.Context, template *domain.TemplateBody) error
 }
 
 // Compiler defines the port for LaTeX compilation operations

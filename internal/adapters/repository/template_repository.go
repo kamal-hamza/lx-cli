@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"lx/internal/core/domain"
 	"lx/pkg/vault"
@@ -84,4 +85,55 @@ func (r *TemplateRepository) Get(ctx context.Context, name string) (*domain.Temp
 		Name: strings.TrimSuffix(filepath.Base(filename), ".sty"),
 		Path: path,
 	}, nil
+}
+
+// Create creates a new template file
+func (r *TemplateRepository) Create(ctx context.Context, template *domain.TemplateBody) error {
+	// Generate filename from slug
+	filename := template.Header.Slug + ".sty"
+	path := r.vault.GetTemplatePath(filename)
+
+	// Check if template already exists
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("template already exists: %s", template.Header.Slug)
+	}
+
+	// Create the template content
+	content := r.renderTemplateContent(template)
+
+	// Write the file
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write template file: %w", err)
+	}
+
+	return nil
+}
+
+// renderTemplateContent generates the LaTeX package content for a template
+func (r *TemplateRepository) renderTemplateContent(template *domain.TemplateBody) string {
+	var builder strings.Builder
+
+	// Package identification
+	builder.WriteString("\\NeedsTeXFormat{LaTeX2e}\n")
+	builder.WriteString(fmt.Sprintf("\\ProvidesPackage{%s}[%s %s]\n\n",
+		template.Header.Slug,
+		time.Now().Format("2006/01/02"),
+		template.Header.Title))
+
+	// Add custom content if provided
+	if template.Content != "" {
+		builder.WriteString(template.Content)
+		builder.WriteString("\n")
+	} else {
+		// Default template structure
+		builder.WriteString("% Template packages and settings\n")
+		builder.WriteString("% Add your custom LaTeX package imports and configurations here\n\n")
+		builder.WriteString("% Example:\n")
+		builder.WriteString("% \\RequirePackage{graphicx}\n")
+		builder.WriteString("% \\RequirePackage{hyperref}\n\n")
+	}
+
+	builder.WriteString("\\endinput\n")
+
+	return builder.String()
 }

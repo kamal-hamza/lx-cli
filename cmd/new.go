@@ -19,21 +19,40 @@ var (
 
 // newCmd represents the new command
 var newCmd = &cobra.Command{
-	Use:   "new [title]",
-	Short: "Create a new LaTeX note",
-	Long: `Create a new LaTeX note with optional template and tags.
+	Use:   "new [title|template] [title]",
+	Short: "Create a new LaTeX note or template",
+	Long: `Create a new LaTeX note with optional template and tags, or create a new template.
 
 Examples:
+  # Create a note
   lx new "Graph Theory Notes"
   lx new "Chemistry Lab" --template homework --tags science,lab
-  lx new "Calculus Chapter 3" -t math-common --tags math,calculus`,
-	Args: cobra.ExactArgs(1),
-	RunE: runNew,
+  lx new "Calculus Chapter 3" -t math-common --tags math,calculus
+
+  # Create a template
+  lx new template "My Custom Template"`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: runNewDispatcher,
 }
 
 func init() {
 	newCmd.Flags().StringVarP(&newTemplateName, "template", "t", "", "Template to use (e.g., homework, ieee)")
 	newCmd.Flags().StringSliceVar(&newTags, "tags", []string{}, "Tags for the note (comma-separated)")
+}
+
+// runNewDispatcher determines whether to create a note or template
+func runNewDispatcher(cmd *cobra.Command, args []string) error {
+	// Check if first arg is "template"
+	if args[0] == "template" {
+		if len(args) < 2 {
+			fmt.Println(ui.FormatError("Template title is required"))
+			return fmt.Errorf("usage: lx new template \"title\"")
+		}
+		return runNewTemplate(cmd, args)
+	}
+
+	// Otherwise, create a note
+	return runNew(cmd, args)
 }
 
 func runNew(cmd *cobra.Command, args []string) error {
@@ -88,6 +107,56 @@ func runNew(cmd *cobra.Command, args []string) error {
 	if err := editorCmd.Run(); err != nil {
 		fmt.Println(ui.FormatWarning("Failed to open editor: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually edit: " + notePath))
+	}
+
+	return nil
+}
+
+func runNewTemplate(cmd *cobra.Command, args []string) error {
+	title := args[1]
+
+	// Create the template
+	req := services.CreateTemplateRequest{
+		Title:   title,
+		Content: "", // Empty content, user will edit in editor
+	}
+
+	ctx := getContext()
+	resp, err := createTemplateService.Execute(ctx, req)
+	if err != nil {
+		fmt.Println(ui.FormatError("Failed to create template"))
+		return err
+	}
+
+	// Success message
+	fmt.Println(ui.FormatSuccess("Template created successfully!"))
+	fmt.Println()
+	fmt.Println(ui.RenderKeyValue("Title", resp.Template.Header.Title))
+	fmt.Println(ui.RenderKeyValue("Slug", resp.Template.Header.Slug))
+	fmt.Println(ui.RenderKeyValue("File", resp.FilePath))
+	fmt.Println()
+
+	// Get the full path
+	templatePath := appVault.GetTemplatePath(resp.FilePath)
+
+	// Open in editor
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi" // Default fallback
+	}
+
+	fmt.Println(ui.FormatInfo("Opening in editor: " + editor))
+	fmt.Println()
+
+	// Launch editor
+	editorCmd := exec.Command(editor, templatePath)
+	editorCmd.Stdin = os.Stdin
+	editorCmd.Stdout = os.Stdout
+	editorCmd.Stderr = os.Stderr
+
+	if err := editorCmd.Run(); err != nil {
+		fmt.Println(ui.FormatWarning("Failed to open editor: " + err.Error()))
+		fmt.Println(ui.FormatInfo("You can manually edit: " + templatePath))
 	}
 
 	return nil
