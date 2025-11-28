@@ -104,6 +104,11 @@ func runDoctor(cmd *cobra.Command, args []string) {
 		}
 		return nil
 	})
+
+	// Check pandoc
+	checkStep("pandoc (Export Tool)", func() error {
+		return checkAndInstallPandoc()
+	})
 }
 
 // checkStep runs a check function and prints the result nicely

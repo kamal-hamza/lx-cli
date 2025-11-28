@@ -78,6 +78,7 @@ func init() {
 	rootCmd.AddCommand(dailyCmd)
 	rootCmd.AddCommand(linksCmd)
 	rootCmd.AddCommand(exploreCmd)
+	rootCmd.AddCommand(exportCmd)
 
 	// Global flags can be added here if needed
 }

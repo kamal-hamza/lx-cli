@@ -69,6 +69,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Println(ui.FormatSuccess("Git ignore file (.gitignore) created"))
 	}
 
+	// Check/Install Pandoc
+	if err := checkAndInstallPandoc(); err != nil {
+		// Warn but don't fail init, as it's optional for basic usage
+		fmt.Println(ui.FormatWarning("Pandoc check skipped: " + err.Error()))
+	}
+
 	// Success message
 	fmt.Println(ui.FormatSuccess("Vault initialized successfully!"))
 	fmt.Println()
