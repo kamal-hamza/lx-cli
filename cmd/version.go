@@ -1,0 +1,32 @@
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+
+	"lx/pkg/ui"
+)
+
+// Version information - these can be set during build with ldflags
+var (
+	Version   = "dev"
+	GitCommit = "unknown"
+	BuildDate = "unknown"
+)
+
+// versionCmd represents the version command
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Display version information",
+	Long:  `Display the current version of lx along with build information.`,
+	Run:   runVersion,
+}
+
+func runVersion(cmd *cobra.Command, args []string) {
+	fmt.Println(ui.StyleTitle.Render("LX") + " - LaTeX Notes Manager")
+	fmt.Println()
+	fmt.Println(ui.RenderKeyValue("Version", Version))
+	fmt.Println(ui.RenderKeyValue("Commit", GitCommit))
+	fmt.Println(ui.RenderKeyValue("Build Date", BuildDate))
+}
