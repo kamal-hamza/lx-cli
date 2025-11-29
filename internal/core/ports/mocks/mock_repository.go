@@ -208,17 +208,17 @@ func NewMockCompiler() *MockCompiler {
 }
 
 // Compile records the compile call and returns error if configured to fail
-func (m *MockCompiler) Compile(ctx context.Context, slug string, env []string) error {
+func (m *MockCompiler) Compile(ctx context.Context, inputPath string, env []string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.calls = append(m.calls, slug)
+	m.calls = append(m.calls, inputPath)
 
 	if m.shouldFail {
 		if m.failError != nil {
 			return m.failError
 		}
-		return fmt.Errorf("compile failed for %s", slug)
+		return fmt.Errorf("compile failed for %s", inputPath)
 	}
 
 	return nil
@@ -248,6 +248,72 @@ func (m *MockCompiler) GetCalls() []string {
 
 // Reset clears all calls and resets state
 func (m *MockCompiler) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls = nil
+	m.shouldFail = false
+	m.failError = nil
+}
+
+// MockPreprocessor is a mock implementation of the Preprocessor interface
+type MockPreprocessor struct {
+	mu         sync.Mutex
+	calls      []string
+	shouldFail bool
+	failError  error
+	mockPath   string
+}
+
+// NewMockPreprocessor creates a new mock preprocessor
+func NewMockPreprocessor() *MockPreprocessor {
+	return &MockPreprocessor{
+		mockPath: "/fake/cache/mock_preprocessed.tex",
+	}
+}
+
+// Process records the call and returns the mock path or error
+func (m *MockPreprocessor) Process(slug string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, slug)
+
+	if m.shouldFail {
+		if m.failError != nil {
+			return "", m.failError
+		}
+		return "", fmt.Errorf("preprocessing failed for %s", slug)
+	}
+
+	return m.mockPath, nil
+}
+
+// SetShouldFail configures the preprocessor to fail
+func (m *MockPreprocessor) SetShouldFail(fail bool, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.shouldFail = fail
+	m.failError = err
+}
+
+// SetMockPath sets the path returned by Process
+func (m *MockPreprocessor) SetMockPath(path string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mockPath = path
+}
+
+// GetCalls returns all process calls made
+func (m *MockPreprocessor) GetCalls() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	calls := make([]string, len(m.calls))
+	copy(calls, m.calls)
+	return calls
+}
+
+// Reset clears state
+func (m *MockPreprocessor) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.calls = nil

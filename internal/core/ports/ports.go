@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 )
 
@@ -38,12 +39,19 @@ type TemplateRepository interface {
 	Create(ctx context.Context, template *domain.TemplateBody) error
 }
 
+// Preprocessor defines the port for note preprocessing operations
+type Preprocessor interface {
+	// Process creates a temporary compilable version of the note with resolved links
+	// Returns the absolute path to the preprocessed file in the cache
+	Process(slug string) (string, error)
+}
+
 // Compiler defines the port for LaTeX compilation operations
 type Compiler interface {
-	// Compile compiles a note to PDF
-	// slug: the note slug to compile
+	// Compile compiles a specific source file to PDF
+	// inputPath: absolute path to the .tex file (usually in cache)
 	// env: additional environment variables (e.g., TEXINPUTS)
-	Compile(ctx context.Context, slug string, env []string) error
+	Compile(ctx context.Context, inputPath string, env []string) error
 
 	// GetOutputPath returns the path to the compiled PDF
 	GetOutputPath(slug string) string

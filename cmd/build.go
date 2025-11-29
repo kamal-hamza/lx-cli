@@ -183,7 +183,8 @@ func runBuildNote(cmd *cobra.Command, args []string) error {
 	fmt.Println(ui.FormatInfo("Building: " + selectedNote.Title))
 	fmt.Println()
 
-	// Build the note
+	// Build the note using BuildService
+	// This will now use the Preprocessor -> Compiler pipeline
 	buildReq := services.BuildRequest{
 		Slug: selectedNote.Slug,
 	}
@@ -347,7 +348,7 @@ Test document for template validation.
 \end{document}
 `, selectedTemplate.Name)
 
-	// Create a temporary file
+	// Create a temporary file in the cache
 	testFile := appVault.GetCachePath("template-test.tex")
 	if err := os.WriteFile(testFile, []byte(testDoc), 0644); err != nil {
 		fmt.Println(ui.FormatError("Failed to create test file: " + err.Error()))
@@ -355,49 +356,21 @@ Test document for template validation.
 	}
 	defer os.Remove(testFile)
 
-	// Compile the test document
-	latexArgs := []string{
-		"-pdf",
-		"-output-directory=" + appVault.CachePath,
-		"-interaction=nonstopmode",
-		"-file-line-error",
-		testFile,
-	}
-
-	cmdExec := exec.Command("latexmk", latexArgs...)
-	cmdExec.Dir = appVault.CachePath
-
-	// Set environment with TEXINPUTS
-	cmdEnv := os.Environ()
-	texinputs := appVault.GetTexInputsEnv()
-	cmdEnv = append(cmdEnv, "TEXINPUTS="+texinputs)
-	cmdExec.Env = cmdEnv
-
 	fmt.Println(ui.FormatRocket("Compiling template test..."))
-	// Capture output
-	output, err := cmdExec.CombinedOutput()
 
-	// Clean up auxiliary files
-	cleanArgs := []string{
-		"-C",
-		"-output-directory=" + appVault.CachePath,
-		testFile,
-	}
-	cleanCmd := exec.Command("latexmk", cleanArgs...)
-	cleanCmd.Dir = appVault.CachePath
-	cleanCmd.Run()
-
-	// Remove PDF if created
-	pdfFile := appVault.GetCachePath("template-test.pdf")
-	os.Remove(pdfFile)
-
-	if err != nil {
+	// Use the updated Compiler directly
+	// This ensures we get the correct environment (assets included in TEXINPUTS)
+	if err := latexCompiler.Compile(ctx, testFile, nil); err != nil {
 		fmt.Println(ui.FormatError("Template compilation failed!"))
 		fmt.Println()
-		fmt.Println(ui.StyleMuted.Render("Error output:"))
-		fmt.Println(string(output))
+		fmt.Println(ui.StyleMuted.Render("Error details:"))
+		fmt.Println(err.Error())
 		return fmt.Errorf("template has errors")
 	}
+
+	// Clean up the PDF artifact (kept cleaning from original logic)
+	pdfFile := appVault.GetCachePath("template-test.pdf")
+	os.Remove(pdfFile)
 
 	fmt.Println(ui.FormatSuccess("Template compiled successfully!"))
 	fmt.Println(ui.FormatInfo("No syntax errors found in template: " + selectedTemplate.Name))

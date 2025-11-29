@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
+	"log"
+	"time"
 
+	"github.com/fsnotify/fsnotify"
 	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
 	"github.com/spf13/cobra"
 
@@ -15,11 +16,14 @@ import (
 
 var watchCmd = &cobra.Command{
 	Use:   "watch [query]",
-	Short: "Live preview a note (silent mode)",
+	Short: "Live preview a note (auto-build on save)",
 	Long: `Continuously rebuild a note whenever you save it.
 
-This runs 'latexmk' in background mode (-view=none).
-It will NOT open or focus your PDF viewer.
+This uses a file watcher to trigger the Preprocess -> Compile cycle
+automatically.
+
+It attempts to open the PDF viewer on the first successful build.
+Subsequent builds will update the file in place (silent reload).
 
 REQUIREMENT: Use a PDF viewer that supports 'auto-reload on change':
   - macOS: Skim (enable "Check for file changes" in settings)
@@ -74,39 +78,105 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	}
 
 	// 2. Start Watcher
-	fmt.Println(ui.FormatRocket("Starting silent watcher for: " + ui.StyleBold.Render(selectedNote.Title)))
-	fmt.Println(ui.FormatMuted("Open the PDF in Skim/SumatraPDF to see updates."))
+	fmt.Println(ui.FormatRocket("Starting watcher for: " + ui.StyleBold.Render(selectedNote.Title)))
 	fmt.Println(ui.FormatMuted("Press Ctrl+C to stop"))
 	fmt.Println()
 
-	// Prepare latexmk command
-	cmdArgs := []string{
-		"-pvc",                     // Preview Continuously
-		"-view=none",               // <--- THE FIX: Don't touch the viewer!
-		"-pdf",                     // Output PDF
-		"-interaction=nonstopmode", // Don't halt on errors
-		"-file-line-error",         // Better error messages
-		"-output-directory=" + appVault.CachePath,
-		appVault.GetNotePath(selectedNote.Filename),
+	// State to track if we've opened the viewer
+	hasOpenedViewer := false
+	pdfPath := appVault.GetCachePath(selectedNote.Slug + ".pdf")
+
+	// Helper to handle build and opening
+	handleBuild := func() {
+		if err := triggerBuild(selectedNote.Slug); err != nil {
+			fmt.Println(ui.FormatError("Build failed: " + err.Error()))
+		} else {
+			fmt.Printf("\r%s Rebuilt %s at %s\n",
+				ui.FormatSuccess("✓"),
+				selectedNote.Slug,
+				time.Now().Format("15:04:05"))
+
+			// Open viewer on first success
+			if !hasOpenedViewer {
+				fmt.Println(ui.FormatInfo("Opening PDF viewer..."))
+				if err := OpenFileWithDefaultApp(pdfPath); err != nil {
+					fmt.Println(ui.FormatWarning("Failed to open PDF: " + err.Error()))
+				}
+				hasOpenedViewer = true
+			}
+		}
 	}
 
-	c := exec.Command("latexmk", cmdArgs...)
+	// Initial Build
+	handleBuild()
 
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	c.Stdin = os.Stdin
+	// 3. Setup Watcher
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("failed to create watcher: %w", err)
+	}
+	defer watcher.Close()
 
-	// Inject Environment
-	env := os.Environ()
-	env = append(env, "TEXINPUTS="+appVault.GetTexInputsEnv())
-	c.Env = env
+	// Watch the specific note file
+	notePath := appVault.GetNotePath(selectedNote.Filename)
+	if err := watcher.Add(notePath); err != nil {
+		return fmt.Errorf("failed to watch file: %w", err)
+	}
 
-	if err := c.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == -1 {
+	// Debounce setup
+	var debounceTimer *time.Timer
+	const debounceDuration = 500 * time.Millisecond
+
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return nil
+			}
+
+			// Handle Write events (and Rename/Chmod which some editors do on save)
+			if event.Has(fsnotify.Write) || event.Has(fsnotify.Rename) || event.Has(fsnotify.Chmod) {
+				// Cancel previous timer if active
+				if debounceTimer != nil {
+					debounceTimer.Stop()
+				}
+
+				// Schedule new build
+				debounceTimer = time.AfterFunc(debounceDuration, func() {
+					// We must re-add the watcher if the editor used "atomic save" (Rename/Move)
+					// Verify file still exists and re-watch if needed
+					// Ignoring error here as file might temporarily disappear during save
+					watcher.Add(notePath)
+
+					handleBuild()
+				})
+			}
+
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return nil
+			}
+			log.Printf("Watcher error: %v", err)
+
+		case <-ctx.Done():
 			return nil
 		}
-		return fmt.Errorf("watcher stopped: %w", err)
+	}
+}
+
+// triggerBuild wraps the service call to keep the main loop clean
+func triggerBuild(slug string) error {
+	ctx := getContext()
+	req := services.BuildRequest{Slug: slug}
+
+	// This now calls the BuildService, which triggers Preprocessor -> Compiler
+	resp, err := buildService.Execute(ctx, req)
+	if err != nil {
+		return err
 	}
 
+	if !resp.Success {
+		return resp.Error
+	}
 	return nil
 }

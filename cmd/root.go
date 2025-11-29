@@ -129,7 +129,8 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	// Initialize services
 	createNoteService = services.NewCreateNoteService(noteRepo, templateRepo)
 	createTemplateService = services.NewCreateTemplateService(templateRepo)
-	buildService = services.NewBuildService(noteRepo, latexCompiler)
+	// FIX: Pass appVault to NewBuildService
+	buildService = services.NewBuildService(noteRepo, latexCompiler, appVault)
 	listService = services.NewListService(noteRepo)
 	indexerService = services.NewIndexerService(noteRepo, appVault.IndexPath())
 	graphService = services.NewGraphService(noteRepo, appVault.RootPath)
