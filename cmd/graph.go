@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-echarts/go-echarts/v2/charts"
 	"github.com/go-echarts/go-echarts/v2/opts"
-	"github.com/go-echarts/go-echarts/v2/types" // <--- ADD THIS IMPORT
+	"github.com/go-echarts/go-echarts/v2/types"
 	"github.com/spf13/cobra"
 )
 
@@ -28,6 +28,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(ui.FormatRocket("Generating knowledge graph..."))
 
+	// 1. Fetch Data
 	// Use global graphService (already initialized with indexer)
 	data, err := graphService.GetGraph(ctx, true) // force refresh
 	if err != nil {
@@ -39,7 +40,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// 3. Prepare Data
+	// 2. Prepare Data
 	slugToTitle := make(map[string]string)
 	var echartsNodes []opts.GraphNode
 	var echartsLinks []opts.GraphLink
@@ -51,9 +52,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 			Name:       n.Title,
 			Value:      float32(n.Value),
 			SymbolSize: calculateSymbolSize(n.Value),
-			// FIX: Cast string to types.FuncStr
-			Tooltip: &opts.Tooltip{Show: opts.Bool(true), Formatter: types.FuncStr(fmt.Sprintf("{b}<br/>(%s)", n.ID))},
-			// Note: Draggable and Label are controlled by Series options in v2
+			Tooltip:    &opts.Tooltip{Show: opts.Bool(true), Formatter: types.FuncStr(fmt.Sprintf("{b}<br/>(%s)", n.ID))},
 		})
 	}
 
@@ -69,21 +68,18 @@ func runGraph(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// 4. Configure Chart
+	// 3. Configure Chart
 	graph := charts.NewGraph()
 
 	graph.SetGlobalOptions(
-		charts.WithTitleOpts(opts.Title{
-			Title:    "LX Knowledge Graph",
-			Subtitle: fmt.Sprintf("%d Notes • %d Connections", len(data.Nodes), len(data.Links)),
-			Left:     "center",
+		// Removed TitleOpts entirely
+		charts.WithTooltipOpts(opts.Tooltip{
+			Show: opts.Bool(true),
 		}),
-		// FIX: Use opts.Bool(true)
-		charts.WithTooltipOpts(opts.Tooltip{Show: opts.Bool(true)}),
 		charts.WithInitializationOpts(opts.Initialization{
 			PageTitle: "LX Knowledge Graph",
 			Width:     "100%",
-			Height:    "95vh",
+			Height:    "100vh",
 		}),
 	)
 
@@ -91,29 +87,29 @@ func runGraph(cmd *cobra.Command, args []string) error {
 		SetSeriesOptions(
 			charts.WithGraphChartOpts(opts.GraphChart{
 				Layout:             "force",
-				Roam:               opts.Bool(true), // FIX: opts.Bool
-				FocusNodeAdjacency: opts.Bool(true), // FIX: opts.Bool
+				Roam:               opts.Bool(true),
+				FocusNodeAdjacency: opts.Bool(true),
 				Force: &opts.GraphForce{
 					Repulsion:  800,
 					Gravity:    0.05,
 					EdgeLength: 150,
 					InitLayout: "circular",
 				},
-				Draggable: opts.Bool(true), // FIX: Draggable goes here in Series options
+				Draggable: opts.Bool(true),
 			}),
 			charts.WithLabelOpts(opts.Label{
-				Show:     opts.Bool(true), // FIX: opts.Bool
+				Show:     opts.Bool(true),
 				Color:    "black",
 				Position: "right",
 			}),
 			charts.WithLineStyleOpts(opts.LineStyle{
 				Color:     "source",
-				Curveness: 0.2,             // Curveness usually accepts float direct, if error persists use opts.Float(0.2)
-				Opacity:   opts.Float(0.6), // Opacity usually accepts float direct
+				Curveness: 0.2,
+				Opacity:   opts.Float(0.6),
 			}),
 		)
 
-	// 5. Render
+	// 4. Render
 	outputPath := filepath.Join(appVault.RootPath, "graph.html")
 	f, err := os.Create(outputPath)
 	if err != nil {
