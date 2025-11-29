@@ -3,6 +3,7 @@ package mocks
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
@@ -438,9 +439,24 @@ func (m *MockAssetRepository) Search(ctx context.Context, query string) ([]domai
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var results []domain.Asset
-	// Return everything for simple testing unless filtering logic is needed for unit tests
+	query = strings.ToLower(query)
 	for _, a := range m.assets {
-		results = append(results, a)
+		if query == "" || strings.Contains(strings.ToLower(a.Filename), query) || strings.Contains(strings.ToLower(a.Description), query) {
+			results = append(results, a)
+		}
 	}
 	return results, nil
+}
+
+// Delete removes an asset from the mock repository (NEW)
+func (m *MockAssetRepository) Delete(ctx context.Context, filename string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.assets[filename]; !ok {
+		// Mimic real behavior: if file doesn't exist in map, typically no error, or check requirement
+		// os.Remove returns error if file not found, but repo.Delete might be idempotent
+		return nil
+	}
+	delete(m.assets, filename)
+	return nil
 }

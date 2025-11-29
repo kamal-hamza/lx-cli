@@ -76,6 +76,9 @@ type AssetRepository interface {
 	// Get retrieves asset metadata by filename
 	Get(ctx context.Context, filename string) (*domain.Asset, error)
 
-	// Search finds assets matching a query (filename, original name, or description)
+	// Search finds assets matching a query
 	Search(ctx context.Context, query string) ([]domain.Asset, error)
+
+	// Delete removes an asset from the registry (NEW)
+	Delete(ctx context.Context, filename string) error
 }
