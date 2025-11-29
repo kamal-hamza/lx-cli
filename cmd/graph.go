@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/kamal-hamza/lx-cli/internal/core/services"
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
 
 	"github.com/go-echarts/go-echarts/v2/charts"
@@ -27,14 +26,10 @@ updates the cache, and produces a 'graph.html' file.`,
 func runGraph(cmd *cobra.Command, args []string) error {
 	ctx := getContext()
 
-	fmt.Println(ui.FormatRocket("Analyzing knowledge graph..."))
+	fmt.Println(ui.FormatRocket("Generating knowledge graph..."))
 
-	// 1. Initialize Service
-	// FIX: Use correct arguments (Repository, RootPath)
-	graphSvc := services.NewGraphService(noteRepo, appVault.RootPath)
-
-	// 2. Fetch Data
-	data, err := graphSvc.GetGraph(ctx, true)
+	// Use global graphService (already initialized with indexer)
+	data, err := graphService.GetGraph(ctx, true) // force refresh
 	if err != nil {
 		return fmt.Errorf("failed to generate graph: %w", err)
 	}

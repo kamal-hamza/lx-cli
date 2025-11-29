@@ -140,7 +140,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	buildService = services.NewBuildServiceWithPreprocessor(noteRepo, latexCompiler, preprocessor, appVault)
 	listService = services.NewListService(noteRepo)
 	indexerService = services.NewIndexerService(noteRepo, appVault.IndexPath())
-	graphService = services.NewGraphService(noteRepo, appVault.RootPath)
+	graphService = services.NewGraphService(indexerService)
 	grepService = services.NewGrepService(appVault.RootPath)
 
 	return nil
