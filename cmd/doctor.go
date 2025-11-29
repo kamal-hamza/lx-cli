@@ -18,10 +18,10 @@ var doctorCmd = &cobra.Command{
 	Long: `Diagnose issues with your LX setup.
 
 Checks for:
-  - Vault directory integrity
+  - Vault directory integrity (including assets)
   - Configuration file existence
-  - Required system dependencies (latexmk, git)
-  - Environment variables`,
+  - Required tools (latexmk, pandoc, git)
+  - Broken links`,
 	Run: runDoctor,
 }
 
@@ -44,16 +44,18 @@ func runDoctor(cmd *cobra.Command, args []string) {
 		return nil
 	})
 
-	checkStep("Templates Directory", func() error {
-		if _, err := os.Stat(appVault.TemplatesPath); os.IsNotExist(err) {
-			return fmt.Errorf("missing at %s", appVault.TemplatesPath)
+	checkStep("Assets Directory", func() error {
+		if _, err := os.Stat(appVault.AssetsPath); os.IsNotExist(err) {
+			return fmt.Errorf("missing at %s", appVault.AssetsPath)
 		}
 		return nil
 	})
 
-	checkStep("Cache Directory", func() error {
-		if _, err := os.Stat(appVault.CachePath); os.IsNotExist(err) {
-			return fmt.Errorf("missing at %s", appVault.CachePath)
+	checkStep("Asset Manifest", func() error {
+		manifestPath := filepath.Join(appVault.AssetsPath, ".manifest.json")
+		if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+			// This is not a fatal error, just a warning
+			return fmt.Errorf("missing (will be created on next attach)")
 		}
 		return nil
 	})
@@ -68,20 +70,22 @@ func runDoctor(cmd *cobra.Command, args []string) {
 
 	// 3. Check Dependencies
 	checkStep("latexmk (Compiler)", func() error {
-		path, err := exec.LookPath("latexmk")
-		if err != nil {
+		if _, err := exec.LookPath("latexmk"); err != nil {
 			return fmt.Errorf("not found in PATH")
 		}
-		// Optional: Check version?
-		// For now, just knowing it exists is enough.
-		_ = path
 		return nil
 	})
 
-	checkStep("git (Version Control)", func() error {
-		_, err := exec.LookPath("git")
-		if err != nil {
-			return fmt.Errorf("not found (required for sync/clone)")
+	checkStep("pandoc (Export)", func() error {
+		if _, err := exec.LookPath("pandoc"); err != nil {
+			return fmt.Errorf("not found (required for 'lx export')")
+		}
+		return nil
+	})
+
+	checkStep("git (Sync)", func() error {
+		if _, err := exec.LookPath("git"); err != nil {
+			return fmt.Errorf("not found (required for 'lx sync')")
 		}
 		return nil
 	})
@@ -89,27 +93,13 @@ func runDoctor(cmd *cobra.Command, args []string) {
 	// 4. Check Environment
 	checkStep("EDITOR Variable", func() error {
 		if os.Getenv("EDITOR") == "" {
-			return fmt.Errorf("not set (will fall back to 'vi')")
+			return fmt.Errorf("not set (using fallback 'vi')")
 		}
 		return nil
 	})
 
 	fmt.Println()
-	fmt.Println(ui.FormatInfo("Diagnosis complete."))
-
-	// Check .latexmkrc file
-	checkStep("Editor Config (.latexmkrc)", func() error {
-		path := filepath.Join(appVault.NotesPath, ".latexmkrc")
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return fmt.Errorf("missing (your editor might clutter the notes folder)")
-		}
-		return nil
-	})
-
-	// Check pandoc
-	checkStep("pandoc (Export Tool)", func() error {
-		return checkAndInstallPandoc()
-	})
+	fmt.Println(ui.FormatInfo("Checking content integrity..."))
 
 	// Check for broken links
 	checkStep("Link Integrity", func() error {
@@ -150,8 +140,9 @@ func checkStep(name string, check func() error) {
 	if err == nil {
 		fmt.Printf("%s %s\n", ui.FormatSuccess("✔"), name)
 	} else {
-		// Print error with indentation for better readability
+		// Differentiate between fatal errors and warnings?
+		// For now, consistent error formatting
 		fmt.Printf("%s %s\n", ui.FormatError("✘"), name)
-		fmt.Printf("    %s\n", ui.StyleMuted.Render("Error: "+err.Error()))
+		fmt.Printf("    %s\n", ui.StyleMuted.Render(err.Error()))
 	}
 }
