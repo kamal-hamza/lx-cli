@@ -7,27 +7,25 @@ import (
 	"regexp"
 	"strings"
 
-	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
-	"github.com/spf13/cobra"
-
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/internal/core/services"
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
+	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
+	"github.com/spf13/cobra"
 )
 
-var (
-	renameTemplate bool
-)
+var renameTemplate bool
 
 var renameCmd = &cobra.Command{
-	Use:   "rename [query] [new-name]",
-	Short: "Rename a note or template (Smart Refactor)",
-	Long: `Rename a note and automatically update all links to it.
+	Use:   "rename [query] [new-title]",
+	Short: "Rename a note and update references",
+	Long: `Rename a note and update all backlinks and imports.
 
-This command:
-1. Renames the file (and updates the % title: metadata)
-2. Scans your entire vault for \ref{old-slug} using parallel workers
-3. Updates those references to \ref{new-slug}
+Refactors:
+- \ref{old-slug}     -> \ref{new-slug}
+- \input{old-slug}   -> \input{new-slug}
+- \include{old-slug} -> \include{new-slug}
+- \cite{old-slug}    -> \cite{new-slug}
 
 Examples:
   lx rename graph "Graph Theory"
@@ -50,8 +48,10 @@ func runRename(cmd *cobra.Command, args []string) error {
 func runRenameNote(cmd *cobra.Command, args []string) error {
 	ctx := getContext()
 
-	// 1. Select Note
-	var query, newTitle string
+	// 1. Parse Arguments & Select Note
+	var query string
+	var newTitle string
+
 	if len(args) > 0 {
 		query = args[0]
 	}
@@ -59,10 +59,10 @@ func runRenameNote(cmd *cobra.Command, args []string) error {
 		newTitle = args[1]
 	}
 
-	var selectedNote *domain.NoteHeader
+	var target *domain.NoteHeader
 
-	// Reuse selection logic
-	if len(args) == 0 {
+	if query == "" {
+		// Interactive Selection
 		req := services.ListRequest{SortBy: "date"}
 		resp, err := listService.Execute(ctx, req)
 		if err != nil {
@@ -80,142 +80,164 @@ func runRenameNote(cmd *cobra.Command, args []string) error {
 				if i == -1 {
 					return ""
 				}
-				return fmt.Sprintf("Rename\n\nTitle: %s\nSlug: %s", resp.Notes[i].Title, resp.Notes[i].Slug)
+				return fmt.Sprintf("Rename Note\n\nTitle: %s\nSlug: %s", resp.Notes[i].Title, resp.Notes[i].Slug)
 			}),
 		)
 		if err != nil {
 			return nil
 		}
-		selectedNote = &resp.Notes[idx]
+		target = &resp.Notes[idx]
 	} else {
+		// Search by query
 		req := services.SearchRequest{Query: query}
 		resp, err := listService.Search(ctx, req)
 		if err != nil {
 			return err
 		}
 		if resp.Total == 0 {
-			fmt.Println(ui.FormatWarning("No notes found matching: " + query))
-			return nil
+			return fmt.Errorf("no note found matching '%s'", query)
 		}
-		selectedNote = &resp.Notes[0]
+		target = &resp.Notes[0]
 	}
 
-	// 2. Get New Title
-	fmt.Println()
-	fmt.Println(ui.FormatInfo("Selected: " + selectedNote.Title))
+	// 2. Prompt for New Title (if not provided)
 	if newTitle == "" {
+		fmt.Println(ui.FormatInfo("Selected: " + target.Title))
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Print(ui.StylePrimary.Render("Enter new title: "))
-		newTitle, _ = reader.ReadString('\n')
-		newTitle = strings.TrimSpace(newTitle)
+		fmt.Print(ui.StyleInfo.Render("Enter new title: "))
+		input, _ := reader.ReadString('\n')
+		newTitle = strings.TrimSpace(input)
+		if newTitle == "" {
+			return fmt.Errorf("title cannot be empty")
+		}
 	}
 
-	// 3. Rename File
-	if err := domain.ValidateTitle(newTitle); err != nil {
+	oldSlug := target.Slug
+
+	// 3. Perform Rename
+	fmt.Println(ui.FormatInfo(fmt.Sprintf("Renaming '%s' -> '%s'...", target.Title, newTitle)))
+	if err := noteRepo.Rename(ctx, oldSlug, newTitle); err != nil {
 		return err
 	}
+
+	// Calculate new slug to perform refactoring
+	// (We re-generate it using the same logic as the repo to ensure consistency)
+	// Ideally we'd get this from the repo response, but for now this works.
 	newSlug := domain.GenerateSlug(newTitle)
-	oldSlug := selectedNote.Slug
 
-	if newSlug == oldSlug {
-		fmt.Println(ui.FormatWarning("Slug unchanged. Skipping."))
-		return nil
-	}
-	if noteRepo.Exists(ctx, newSlug) {
-		return fmt.Errorf("slug '%s' already exists", newSlug)
-	}
+	// 4. Smart Refactor
+	fmt.Println(ui.FormatRocket("Refactoring references..."))
 
-	oldPath := appVault.GetNotePath(selectedNote.Filename)
-
-	// Preserve date prefix if present
-	newFilename := domain.GenerateFilename(newSlug)
-	if strings.Contains(selectedNote.Filename, "-") {
-		parts := strings.SplitN(selectedNote.Filename, "-", 2)
-		if len(parts) == 2 && len(parts[0]) == 8 { // YYYYMMDD check
-			newFilename = parts[0] + "-" + newSlug + ".tex"
-		}
-	}
-	newPath := appVault.GetNotePath(newFilename)
-
-	// Update Metadata in content
-	contentBytes, err := os.ReadFile(oldPath)
+	matches, err := grepService.Execute(ctx, oldSlug)
 	if err != nil {
 		return err
 	}
-	content := string(contentBytes)
 
-	titleRegex := regexp.MustCompile(`(?m)^%\s*title:.*$`)
-	content = titleRegex.ReplaceAllString(content, fmt.Sprintf("%% title: %s", newTitle))
-
-	if err := os.WriteFile(oldPath, []byte(content), 0644); err != nil {
-		return err
-	}
-	if err := os.Rename(oldPath, newPath); err != nil {
-		return err
-	}
-
-	fmt.Println(ui.FormatSuccess(fmt.Sprintf("Renamed to: %s", newTitle)))
-
-	// 4. SMART REFACTOR (Optimized)
-	fmt.Print(ui.StyleInfo.Render("♻️  Refactoring backlinks... "))
-
-	// Step A: Find files containing \ref{old-slug} using concurrent Grep
-	// This avoids reading every single file sequentially
-	searchQuery := fmt.Sprintf("\\ref{%s}", oldSlug)
-	matches, err := grepService.Execute(ctx, searchQuery)
-	if err != nil {
-		fmt.Println(ui.FormatWarning("Could not scan for backlinks: " + err.Error()))
-		return nil
-	}
-
-	// Step B: Deduplicate files (grep might find multiple matches in one file)
-	filesToUpdate := make(map[string]bool)
+	filesToEdit := make(map[string]bool)
 	for _, m := range matches {
-		// Don't try to update the file we just renamed (it has the new filename now anyway)
-		// Grep might have found it under the old name if the index wasn't perfectly fresh,
-		// or under the new name if content matched.
-		// Safety check: if filename == newFilename, skip (we don't reference ourselves usually)
-		if m.Filename == newFilename {
-			continue
+		if m.Slug != newSlug {
+			filesToEdit[m.Filename] = true
 		}
-		filesToUpdate[m.Filename] = true
 	}
 
-	// Step C: Update only the matching files
-	// Regex to strictly match \ref{old-slug}
-	refRegex := regexp.MustCompile(`\\ref\{` + regexp.QuoteMeta(oldSlug) + `\}`)
-	newRef := fmt.Sprintf("\\ref{%s}", newSlug)
-	updatedCount := 0
+	count := 0
+	refRegex := regexp.MustCompile(`\\(ref|input|include|cite)\{` + regexp.QuoteMeta(oldSlug) + `\}`)
 
-	for filename := range filesToUpdate {
+	for filename := range filesToEdit {
 		path := appVault.GetNotePath(filename)
-		data, err := os.ReadFile(path)
+		content, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
 
-		noteContent := string(data)
-		if refRegex.MatchString(noteContent) {
-			newContent := refRegex.ReplaceAllString(noteContent, newRef)
+		newContent := refRegex.ReplaceAllString(string(content), `\$1{`+newSlug+`}`)
+
+		if newContent != string(content) {
 			if err := os.WriteFile(path, []byte(newContent), 0644); err == nil {
-				updatedCount++
+				fmt.Printf("  %s %s\n", ui.FormatSuccess("Updated"), filename)
+				count++
 			}
 		}
 	}
 
-	fmt.Println(ui.FormatSuccess("Done"))
-	if updatedCount > 0 {
-		fmt.Println(ui.FormatInfo(fmt.Sprintf("Updated references in %d notes.", updatedCount)))
+	if count == 0 {
+		fmt.Println(ui.FormatMuted("No incoming references found."))
 	} else {
-		fmt.Println(ui.FormatMuted("No incoming links found to update."))
+		fmt.Println(ui.FormatSuccess(fmt.Sprintf("Updated references in %d files.", count)))
 	}
 
 	return nil
 }
 
 func runRenameTemplate(cmd *cobra.Command, args []string) error {
-	// (Template renaming logic remains identical to previous version)
-	// It is less performance critical as templates are few.
-	// You can copy the previous implementation here.
+	ctx := getContext()
+
+	// 1. Select Template
+	var query, newName string
+	if len(args) > 0 {
+		query = args[0]
+	}
+	if len(args) > 1 {
+		newName = args[1]
+	}
+
+	templates, err := templateRepo.List(ctx)
+	if err != nil {
+		return err
+	}
+	if len(templates) == 0 {
+		fmt.Println(ui.FormatWarning("No templates found."))
+		return nil
+	}
+
+	var selected *domain.Template
+
+	if query == "" {
+		idx, err := fuzzyfinder.Find(
+			templates,
+			func(i int) string { return templates[i].Name },
+		)
+		if err != nil {
+			return nil
+		}
+		selected = &templates[idx]
+	} else {
+		// Simple search
+		for _, t := range templates {
+			if strings.Contains(t.Name, query) {
+				selected = &t
+				break
+			}
+		}
+		if selected == nil {
+			return fmt.Errorf("template not found: %s", query)
+		}
+	}
+
+	// 2. Prompt for New Name
+	if newName == "" {
+		fmt.Println(ui.FormatInfo("Selected: " + selected.Name))
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Print(ui.StyleInfo.Render("Enter new template name (no extension): "))
+		input, _ := reader.ReadString('\n')
+		newName = strings.TrimSpace(input)
+		if newName == "" {
+			return fmt.Errorf("name cannot be empty")
+		}
+	}
+
+	// 3. Rename File
+	oldPath := selected.Path
+	newFilename := newName
+	if !strings.HasSuffix(newFilename, ".sty") {
+		newFilename += ".sty"
+	}
+	newPath := appVault.GetTemplatePath(newFilename)
+
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return fmt.Errorf("failed to rename template: %w", err)
+	}
+
+	fmt.Println(ui.FormatSuccess(fmt.Sprintf("Renamed template to: %s", newName)))
 	return nil
 }

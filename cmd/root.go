@@ -27,6 +27,8 @@ var (
 	graphService          *services.GraphService
 	grepService           *services.GrepService
 
+	preprocessor *services.Preprocessor
+
 	// Repositories
 	noteRepo     *repository.FileRepository
 	templateRepo *repository.TemplateRepository
@@ -87,6 +89,7 @@ func init() {
 	rootCmd.AddCommand(reindexCmd)
 	rootCmd.AddCommand(daemonCmd)
 	rootCmd.AddCommand(assetsCmd)
+	rootCmd.AddCommand(exportAllCmd)
 
 	// Global flags can be added here if needed
 }
@@ -129,14 +132,15 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	// Initialize compiler
 	latexCompiler = compiler.NewLatexmkCompiler(appVault)
 
+	preprocessor = services.NewPreprocessor(noteRepo, appVault)
+
 	// Initialize services
 	createNoteService = services.NewCreateNoteService(noteRepo, templateRepo)
 	createTemplateService = services.NewCreateTemplateService(templateRepo)
-	// FIX: Pass appVault to NewBuildService
-	buildService = services.NewBuildService(noteRepo, latexCompiler, appVault)
+	buildService = services.NewBuildServiceWithPreprocessor(noteRepo, latexCompiler, preprocessor, appVault)
 	listService = services.NewListService(noteRepo)
 	indexerService = services.NewIndexerService(noteRepo, appVault.IndexPath())
-	graphService = services.NewGraphService(noteRepo, appVault.RootPath)
+	graphService = services.NewGraphService(indexerService)
 	grepService = services.NewGrepService(appVault.RootPath)
 
 	return nil

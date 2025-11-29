@@ -106,3 +106,15 @@ func (r *FileAssetRepository) Search(ctx context.Context, query string) ([]domai
 
 	return matches, nil
 }
+
+func (r *FileAssetRepository) Delete(ctx context.Context, filename string) error {
+	if len(r.cache) == 0 {
+		r.Load()
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.cache, filename)
+	return r.flush()
+}
