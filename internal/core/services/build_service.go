@@ -7,19 +7,34 @@ import (
 
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/internal/core/ports"
+	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 // BuildService handles LaTeX compilation operations
 type BuildService struct {
-	noteRepo ports.Repository
-	compiler ports.Compiler
+	noteRepo     ports.Repository
+	compiler     ports.Compiler
+	preprocessor ports.Preprocessor // Interface type to allow mocking
+	vault        *vault.Vault
 }
 
-// NewBuildService creates a new build service
-func NewBuildService(noteRepo ports.Repository, compiler ports.Compiler) *BuildService {
+// NewBuildService creates a new build service (Normal usage)
+func NewBuildService(noteRepo ports.Repository, compiler ports.Compiler, v *vault.Vault) *BuildService {
 	return &BuildService{
-		noteRepo: noteRepo,
-		compiler: compiler,
+		noteRepo:     noteRepo,
+		compiler:     compiler,
+		preprocessor: NewPreprocessor(noteRepo, v), // Uses real preprocessor
+		vault:        v,
+	}
+}
+
+// NewBuildServiceWithPreprocessor creates a new build service with injected preprocessor (For testing)
+func NewBuildServiceWithPreprocessor(noteRepo ports.Repository, compiler ports.Compiler, preprocessor ports.Preprocessor, v *vault.Vault) *BuildService {
+	return &BuildService{
+		noteRepo:     noteRepo,
+		compiler:     compiler,
+		preprocessor: preprocessor,
+		vault:        v,
 	}
 }
 
@@ -56,8 +71,15 @@ func (s *BuildService) Execute(ctx context.Context, req BuildRequest) (*BuildRes
 		return nil, fmt.Errorf("note not found: %s", req.Slug)
 	}
 
-	// Compile the note
-	err := s.compiler.Compile(ctx, req.Slug, []string{})
+	// 1. Preprocess the note
+	// This resolves links/paths and writes a compilable .tex file to the cache directory
+	preprocessedPath, err := s.preprocessor.Process(req.Slug)
+	if err != nil {
+		return nil, fmt.Errorf("preprocessing failed: %w", err)
+	}
+
+	// 2. Compile the preprocessed file
+	err = s.compiler.Compile(ctx, preprocessedPath, []string{})
 	if err != nil {
 		return &BuildResponse{
 			Slug:    req.Slug,
@@ -127,10 +149,12 @@ func (s *BuildService) buildConcurrently(ctx context.Context, headers []domain.N
 
 	// Start workers
 	var wg sync.WaitGroup
-	for range maxWorkers {
-		wg.Go(func() {
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			s.worker(ctx, jobs, results)
-		})
+		}()
 	}
 
 	// Send jobs
@@ -169,8 +193,19 @@ func (s *BuildService) worker(ctx context.Context, jobs <-chan domain.NoteHeader
 		default:
 		}
 
-		// Compile the note
-		err := s.compiler.Compile(ctx, header.Slug, []string{})
+		// 1. Preprocess
+		preprocessedPath, err := s.preprocessor.Process(header.Slug)
+		if err != nil {
+			results <- BuildResponse{
+				Slug:    header.Slug,
+				Success: false,
+				Error:   err,
+			}
+			continue
+		}
+
+		// 2. Compile
+		err = s.compiler.Compile(ctx, preprocessedPath, []string{})
 
 		result := BuildResponse{
 			Slug: header.Slug,
@@ -252,10 +287,12 @@ func (s *BuildService) buildWithProgress(ctx context.Context, headers []domain.N
 
 	// Start workers
 	var wg sync.WaitGroup
-	for range maxWorkers {
-		wg.Go(func() {
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			s.worker(ctx, jobs, results)
-		})
+		}()
 	}
 
 	// Send jobs

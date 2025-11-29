@@ -7,6 +7,7 @@ import (
 
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/internal/core/ports"
+	"github.com/kamal-hamza/lx-cli/pkg/metadata"
 )
 
 // CreateNoteService handles the creation of new notes
@@ -78,15 +79,13 @@ func (s *CreateNoteService) Execute(ctx context.Context, req CreateNoteRequest) 
 func (s *CreateNoteService) renderContent(ctx context.Context, templateName string, header *domain.NoteHeader) (string, error) {
 	var builder strings.Builder
 
-	// Start with metadata comments
-	builder.WriteString("%% Metadata\n")
-	builder.WriteString(fmt.Sprintf("%% title: %s\n", header.Title))
-	builder.WriteString(fmt.Sprintf("%% date: %s\n", header.Date))
-	if len(header.Tags) > 0 {
-		builder.WriteString(fmt.Sprintf("%% tags: %s\n", strings.Join(header.Tags, ", ")))
-	} else {
-		builder.WriteString("%% tags: \n")
+	// Generate standardized metadata using robust metadata package
+	meta := &metadata.Metadata{
+		Title: header.Title,
+		Date:  header.Date,
+		Tags:  header.Tags,
 	}
+	builder.WriteString(metadata.Format(meta))
 	builder.WriteString("\n")
 
 	// Document class

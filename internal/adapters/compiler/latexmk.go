@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
@@ -23,14 +22,11 @@ func NewLatexmkCompiler(vault *vault.Vault) *LatexmkCompiler {
 }
 
 // Compile compiles a note to PDF using latexmk
-func (c *LatexmkCompiler) Compile(ctx context.Context, slug string, env []string) error {
-	// Find the source file
-	sourceFile, err := c.findSourceFile(slug)
-	if err != nil {
-		return err
+func (c *LatexmkCompiler) Compile(ctx context.Context, inputPath string, env []string) error {
+	// Validate input
+	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
+		return fmt.Errorf("source file not found: %s", inputPath)
 	}
-
-	sourcePath := c.vault.GetNotePath(sourceFile)
 
 	// Prepare latexmk command
 	// -pdf: generate PDF using pdflatex
@@ -42,22 +38,26 @@ func (c *LatexmkCompiler) Compile(ctx context.Context, slug string, env []string
 		"-output-directory=" + c.vault.CachePath,
 		"-interaction=nonstopmode",
 		"-file-line-error",
-		sourcePath,
+		inputPath,
 	}
 
 	cmd := exec.CommandContext(ctx, "latexmk", args...)
 
-	// Set working directory to cache
+	// Set working directory to cache (since inputPath is usually in cache)
 	cmd.Dir = c.vault.CachePath
 
 	// Prepare environment
 	cmdEnv := os.Environ()
 
 	// Add TEXINPUTS for template discovery
+	// We append NotesPath and AssetsPath to TEXINPUTS so that any relative
+	// imports that weren't caught by the preprocessor (or implicit ones) still work.
 	texinputs := c.vault.GetTexInputsEnv()
-	cmdEnv = append(cmdEnv, "TEXINPUTS="+texinputs)
+	// Format: .:templates//:assets//:notes//:
+	// Note: GetTexInputsEnv typically returns ".:templates//:" so we append to it
+	texinputs = fmt.Sprintf("%s%s//:%s//:", texinputs, c.vault.AssetsPath, c.vault.NotesPath)
 
-	// Add any additional environment variables
+	cmdEnv = append(cmdEnv, "TEXINPUTS="+texinputs)
 	cmdEnv = append(cmdEnv, env...)
 
 	cmd.Env = cmdEnv
@@ -73,53 +73,20 @@ func (c *LatexmkCompiler) Compile(ctx context.Context, slug string, env []string
 
 // GetOutputPath returns the path to the compiled PDF
 func (c *LatexmkCompiler) GetOutputPath(slug string) string {
-	// Find the source file to get the base name
-	sourceFile, err := c.findSourceFile(slug)
-	if err != nil {
-		// Fallback to constructing from slug
-		return c.vault.GetCachePath(slug + ".pdf")
-	}
-
-	// Replace .tex with .pdf
-	pdfName := strings.TrimSuffix(sourceFile, ".tex") + ".pdf"
-	return c.vault.GetCachePath(pdfName)
-}
-
-// findSourceFile finds the .tex file matching the slug
-func (c *LatexmkCompiler) findSourceFile(slug string) (string, error) {
-	entries, err := os.ReadDir(c.vault.NotesPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read notes directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tex") {
-			continue
-		}
-
-		// Check if filename contains the slug
-		name := strings.TrimSuffix(entry.Name(), ".tex")
-		if strings.HasSuffix(name, slug) || strings.Contains(name, "-"+slug) {
-			return entry.Name(), nil
-		}
-	}
-
-	return "", fmt.Errorf("source file not found for slug: %s", slug)
+	// The preprocessor writes "slug.tex" to cache, so output is "slug.pdf" in the cache dir
+	return c.vault.GetCachePath(slug + ".pdf")
 }
 
 // Clean removes auxiliary files for a specific note
 func (c *LatexmkCompiler) Clean(ctx context.Context, slug string) error {
-	sourceFile, err := c.findSourceFile(slug)
-	if err != nil {
-		return err
-	}
-
-	sourcePath := c.vault.GetNotePath(sourceFile)
+	// We target the preprocessed/cached file for cleaning
+	filename := slug + ".tex"
+	targetPath := c.vault.GetCachePath(filename)
 
 	args := []string{
 		"-C",
 		"-output-directory=" + c.vault.CachePath,
-		sourcePath,
+		targetPath,
 	}
 
 	cmd := exec.CommandContext(ctx, "latexmk", args...)

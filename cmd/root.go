@@ -63,6 +63,7 @@ func init() {
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(buildAllCmd)
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(purgeCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(gitCmd)
 	rootCmd.AddCommand(cloneCmd)
@@ -83,6 +84,7 @@ func init() {
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(todoCmd)
 	rootCmd.AddCommand(reindexCmd)
+	rootCmd.AddCommand(daemonCmd)
 
 	// Global flags can be added here if needed
 }
@@ -101,8 +103,8 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	}
 	appVault = v
 
-	// Check if vault exists
-	if !appVault.Exists() {
+	// Check if vault exists (skip for purge command which handles its own vault check)
+	if cmd.Name() != "purge" && !appVault.Exists() {
 		fmt.Println(ui.FormatError("Vault not initialized"))
 		fmt.Println(ui.FormatInfo("Run 'lx init' to initialize the vault"))
 		os.Exit(1)
@@ -127,7 +129,8 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	// Initialize services
 	createNoteService = services.NewCreateNoteService(noteRepo, templateRepo)
 	createTemplateService = services.NewCreateTemplateService(templateRepo)
-	buildService = services.NewBuildService(noteRepo, latexCompiler)
+	// FIX: Pass appVault to NewBuildService
+	buildService = services.NewBuildService(noteRepo, latexCompiler, appVault)
 	listService = services.NewListService(noteRepo)
 	indexerService = services.NewIndexerService(noteRepo, appVault.IndexPath())
 	graphService = services.NewGraphService(noteRepo, appVault.RootPath)
