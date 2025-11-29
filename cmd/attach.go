@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/kamal-hamza/lx-cli/internal/core/services"
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
@@ -13,17 +16,13 @@ import (
 
 var attachCmd = &cobra.Command{
 	Use:   "attach [file]",
-	Short: "Import an image or file into the vault",
-	Long: `Import an attachment into the vault's assets directory.
+	Short: "Import an asset with interactive metadata",
+	Long: `Import an attachment into the vault.
 
-Features:
-- Deduplication: Files are renamed based on content hash.
-- Auto-Clipboard: Copies the LaTeX code to your clipboard.
-- Access: Assets are globally available to all notes.
+You will be prompted to enter a Name and a Description.
+The description is mandatory to ensure searchability later.
 
-Examples:
-  lx attach ~/Downloads/graph.png
-  lx attach screenshot.jpg`,
+Duplicates are handled automatically via content hashing.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runAttach,
 }
@@ -32,36 +31,59 @@ func runAttach(cmd *cobra.Command, args []string) error {
 	ctx := getContext()
 	srcPath := args[0]
 
-	// 1. Initialize Service
-	svc := services.NewAttachmentService(appVault)
+	svc := services.NewAttachmentService(appVault, assetRepo)
 
-	// 2. Validate Source
 	absPath, err := filepath.Abs(srcPath)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println(ui.FormatRocket(fmt.Sprintf("Attaching %s...", filepath.Base(absPath))))
+	fmt.Println()
+
+	reader := bufio.NewReader(os.Stdin)
+
+	// 1. Interactive Prompt: Name
+	fmt.Print(ui.StyleInfo.Render("? Enter a name (slug): "))
+	nameInput, _ := reader.ReadString('\n')
+	nameInput = strings.TrimSpace(nameInput)
+	if nameInput == "" {
+		// Default to filename if empty (fallback logic)
+		nameInput = strings.TrimSuffix(filepath.Base(absPath), filepath.Ext(absPath))
+		fmt.Printf("  Using default: %s\n", nameInput)
+	}
+
+	// 2. Interactive Prompt: Description (Mandatory)
+	var descInput string
+	for {
+		fmt.Print(ui.StyleInfo.Render("? Enter description (required): "))
+		descInput, _ = reader.ReadString('\n')
+		descInput = strings.TrimSpace(descInput)
+		if descInput != "" {
+			break
+		}
+		fmt.Println(ui.FormatWarning("Description cannot be empty."))
+	}
+
+	fmt.Println()
 
 	// 3. Store File
-	filename, err := svc.Store(ctx, absPath)
+	filename, err := svc.Store(ctx, absPath, nameInput, descInput)
 	if err != nil {
 		return err
 	}
 
-	// 4. Generate Snippet
-	// Standard LaTeX include. We don't need path because of TEXINPUTS
+	// 4. Output
 	latexSnippet := fmt.Sprintf("\\includegraphics[width=0.8\\linewidth]{%s}", filename)
 
-	// 5. Success & Clipboard
 	fmt.Println(ui.FormatSuccess("Asset stored: " + filename))
+	fmt.Println(ui.FormatMuted("Description saved."))
 	fmt.Println()
-	fmt.Println(ui.FormatInfo("LaTeX Code (Copied to Clipboard):"))
+	fmt.Println(ui.FormatInfo("LaTeX Code (Copied):"))
 	fmt.Println(ui.StyleBold.Render(latexSnippet))
 
-	// Try to write to clipboard (non-blocking if fails)
 	if err := clipboard.WriteAll(latexSnippet); err != nil {
-		fmt.Println(ui.FormatMuted("(Clipboard access failed, please copy manually)"))
+		fmt.Println(ui.FormatMuted("(Clipboard access failed)"))
 	}
 
 	return nil

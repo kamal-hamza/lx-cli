@@ -30,6 +30,7 @@ var (
 	// Repositories
 	noteRepo     *repository.FileRepository
 	templateRepo *repository.TemplateRepository
+	assetRepo    *repository.FileAssetRepository
 
 	// Compiler
 	latexCompiler *compiler.LatexmkCompiler
@@ -85,6 +86,7 @@ func init() {
 	rootCmd.AddCommand(todoCmd)
 	rootCmd.AddCommand(reindexCmd)
 	rootCmd.AddCommand(daemonCmd)
+	rootCmd.AddCommand(assetsCmd)
 
 	// Global flags can be added here if needed
 }
@@ -122,6 +124,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	// Initialize repositories
 	noteRepo = repository.NewFileRepository(appVault)
 	templateRepo = repository.NewTemplateRepository(appVault)
+	assetRepo = repository.NewFileAssetRepository(appVault)
 
 	// Initialize compiler
 	latexCompiler = compiler.NewLatexmkCompiler(appVault)

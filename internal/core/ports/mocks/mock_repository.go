@@ -400,3 +400,47 @@ func (m *MockFileOpener) SetShouldFail(fail bool) {
 	defer m.mu.Unlock()
 	m.shouldFail = fail
 }
+
+// MockAssetRepository is a mock implementation of the AssetRepository interface
+type MockAssetRepository struct {
+	mu     sync.Mutex
+	assets map[string]domain.Asset
+}
+
+// NewMockAssetRepository creates a new mock asset repository
+func NewMockAssetRepository() *MockAssetRepository {
+	return &MockAssetRepository{
+		assets: make(map[string]domain.Asset),
+	}
+}
+
+// Save persists an asset to the mock store
+func (m *MockAssetRepository) Save(ctx context.Context, asset domain.Asset) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.assets[asset.Filename] = asset
+	return nil
+}
+
+// Get retrieves an asset by filename
+func (m *MockAssetRepository) Get(ctx context.Context, filename string) (*domain.Asset, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	asset, ok := m.assets[filename]
+	if !ok {
+		return nil, fmt.Errorf("asset not found")
+	}
+	return &asset, nil
+}
+
+// Search mock implementation
+func (m *MockAssetRepository) Search(ctx context.Context, query string) ([]domain.Asset, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var results []domain.Asset
+	// Return everything for simple testing unless filtering logic is needed for unit tests
+	for _, a := range m.assets {
+		results = append(results, a)
+	}
+	return results, nil
+}

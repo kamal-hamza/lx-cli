@@ -9,64 +9,101 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/kamal-hamza/lx-cli/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/internal/core/ports"
 	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 type AttachmentService struct {
-	vault *vault.Vault
+	vault     *vault.Vault
+	assetRepo ports.AssetRepository
 }
 
-func NewAttachmentService(v *vault.Vault) *AttachmentService {
-	return &AttachmentService{vault: v}
+func NewAttachmentService(v *vault.Vault, repo ports.AssetRepository) *AttachmentService {
+	return &AttachmentService{
+		vault:     v,
+		assetRepo: repo,
+	}
 }
 
-// Store saves a file to the vault's assets directory using content-addressable naming
-func (s *AttachmentService) Store(ctx context.Context, srcPath string) (string, error) {
-	// 1. Open Source File
-	src, err := os.Open(srcPath)
+// Store saves a file and its metadata
+func (s *AttachmentService) Store(ctx context.Context, srcPath string, name string, description string) (string, error) {
+	// 1. Open Source & Calculate Hash
+	srcFile, err := os.Open(srcPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open source file: %w", err)
 	}
-	defer src.Close()
+	defer srcFile.Close()
 
-	// 2. Calculate Hash (SHA-256)
 	hasher := sha256.New()
-	if _, err := io.Copy(hasher, src); err != nil {
+	if _, err := io.Copy(hasher, srcFile); err != nil {
 		return "", fmt.Errorf("failed to calculate hash: %w", err)
 	}
-	hash := hex.EncodeToString(hasher.Sum(nil))
+	srcHash := hex.EncodeToString(hasher.Sum(nil))
 
-	// 3. Determine Extension and Destination
+	srcFile.Seek(0, 0) // Reset for copy
+
+	// 2. Determine Target Filename
 	ext := strings.ToLower(filepath.Ext(srcPath))
-	// Use first 12 chars of hash for filename (plenty for uniqueness in personal vault)
-	filename := hash[:12] + ext
-	destPath := s.vault.GetAssetPath(filename)
+	baseName := domain.GenerateSlug(name)
+	targetName := baseName + ext
+	destPath := s.vault.GetAssetPath(targetName)
 
-	// 4. Check Deduplication
-	if _, err := os.Stat(destPath); err == nil {
-		// File already exists with same content (hash match)
-		return filename, nil
+	// 3. Collision Resolution
+	counter := 1
+	for {
+		if info, err := os.Stat(destPath); err == nil && !info.IsDir() {
+			if matches, _ := s.checkHashMatch(destPath, srcHash); matches {
+				// EXISTING MATCH: Content is identical, reuse existing file.
+				// We update the metadata to the latest description provided.
+				s.saveMetadata(ctx, filepath.Base(destPath), srcPath, description, srcHash)
+				return filepath.Base(destPath), nil
+			}
+			// Name collision but different content -> Rename (graph-1.png)
+			targetName = fmt.Sprintf("%s-%d%s", baseName, counter, ext)
+			destPath = s.vault.GetAssetPath(targetName)
+			counter++
+			continue
+		}
+		break
 	}
 
-	// 5. Copy File (Since we read it for hashing, we need to reset or reopen)
-	// Reopening is safer/simpler than seeking
-	src.Close()
-	src, err = os.Open(srcPath)
+	// 4. Copy File
+	dst, err := os.Create(destPath)
 	if err != nil {
 		return "", err
 	}
-	defer src.Close()
-
-	dst, err := os.Create(destPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to create asset file: %w", err)
-	}
 	defer dst.Close()
+	io.Copy(dst, srcFile)
 
-	if _, err := io.Copy(dst, src); err != nil {
-		return "", fmt.Errorf("failed to copy file: %w", err)
+	// 5. Save Metadata
+	if err := s.saveMetadata(ctx, targetName, srcPath, description, srcHash); err != nil {
+		fmt.Printf("Warning: failed to save asset metadata: %v\n", err)
 	}
 
-	return filename, nil
+	return targetName, nil
+}
+
+func (s *AttachmentService) saveMetadata(ctx context.Context, filename, originalPath, description, hash string) error {
+	asset := domain.Asset{
+		Filename:     filename,
+		OriginalName: filepath.Base(originalPath),
+		Description:  description,
+		Hash:         hash,
+		UploadedAt:   time.Now(),
+	}
+	return s.assetRepo.Save(ctx, asset)
+}
+
+func (s *AttachmentService) checkHashMatch(path string, expectedHash string) (bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+	hasher := sha256.New()
+	io.Copy(hasher, file)
+	return hex.EncodeToString(hasher.Sum(nil)) == expectedHash, nil
 }
