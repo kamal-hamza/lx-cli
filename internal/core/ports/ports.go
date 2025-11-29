@@ -68,3 +68,14 @@ type FileOpener interface {
 	// Open opens a file with the system's default application
 	Open(ctx context.Context, filepath string) error
 }
+
+type AssetRepository interface {
+	// Save adds or updates an asset record
+	Save(ctx context.Context, asset domain.Asset) error
+
+	// Get retrieves asset metadata by filename
+	Get(ctx context.Context, filename string) (*domain.Asset, error)
+
+	// Search finds assets matching a query (filename, original name, or description)
+	Search(ctx context.Context, query string) ([]domain.Asset, error)
+}

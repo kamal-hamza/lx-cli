@@ -178,7 +178,7 @@ func TestGrepService_ScanFile_NonExistentFile(t *testing.T) {
 	matches := svc.scanFile("/non/existent/file.tex", "query", false)
 
 	// Assert - should return nil or empty slice
-	if matches != nil && len(matches) != 0 {
+	if matches != nil {
 		t.Errorf("expected nil or empty matches for non-existent file, got %d matches", len(matches))
 	}
 }

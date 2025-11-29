@@ -19,14 +19,17 @@ type IndexEntry struct {
 	Filename string   `json:"filename"`
 
 	// Graph Connections
-	OutgoingLinks []string `json:"outgoing_links"` // Links found in this file
+	OutgoingLinks []string `json:"outgoing_links"` // \ref, \input, etc.
 	Backlinks     []string `json:"backlinks"`      // Other files pointing here
+
+	// Assets used in this note
+	Assets []string `json:"assets"` // \includegraphics{...}
 }
 
 // NewIndex creates a new empty index
 func NewIndex() *Index {
 	return &Index{
-		Version:     "1.0",
+		Version:     "1.1",
 		LastIndexed: time.Now(),
 		Notes:       make(map[string]IndexEntry),
 	}
