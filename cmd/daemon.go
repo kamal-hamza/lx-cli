@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -16,68 +15,33 @@ import (
 )
 
 var (
-	reindexWatch bool
-	reindexQuiet bool
+	daemonQuiet bool
 )
 
-var reindexCmd = &cobra.Command{
-	Use:   "reindex",
-	Short: "Rebuild the vault index and connection graph",
-	Long: `Rebuild the vault index by scanning all notes for metadata and connections.
+var daemonCmd = &cobra.Command{
+	Use:   "daemon",
+	Short: "Run background daemon for auto-reindexing",
+	Long: `Run a background daemon that watches for file changes and automatically reindexes.
 
-This command:
-  1. Scans all .tex files in the vault
-  2. Extracts metadata (title, date, tags)
-  3. Detects LaTeX links (\input, \ref, \cite, etc.)
-  4. Calculates backlinks by inverting connections
-  5. Saves the index to index.json
+This command monitors the notes directory for:
+  - New .tex files created
+  - Existing .tex files modified
+  - .tex files deleted
 
-The index enables fast lookups and graph visualization without scanning files.
+When changes are detected, it automatically rebuilds the index to keep
+connections, backlinks, and metadata up-to-date.
 
-Use --watch to continuously monitor for file changes and auto-reindex.`,
-	RunE: runReindex,
+Use --quiet to suppress reindex notifications.`,
+	RunE: runDaemon,
 }
 
 func init() {
-	reindexCmd.Flags().BoolVarP(&reindexWatch, "watch", "w", false, "Watch for changes and auto-reindex")
-	reindexCmd.Flags().BoolVarP(&reindexQuiet, "quiet", "q", false, "Suppress reindex notifications (only with --watch)")
+	daemonCmd.Flags().BoolVarP(&daemonQuiet, "quiet", "q", false, "Suppress reindex notifications")
 }
 
-func runReindex(cmd *cobra.Command, args []string) error {
+func runDaemon(cmd *cobra.Command, args []string) error {
 	ctx := getContext()
 
-	// If --watch flag is set, run in watch mode
-	if reindexWatch {
-		return runReindexWatch(ctx)
-	}
-
-	// Single reindex
-	fmt.Println(ui.FormatRocket("Reindexing vault..."))
-	fmt.Println()
-
-	startTime := time.Now()
-	indexerService := services.NewIndexerService(noteRepo, appVault.IndexPath())
-	req := services.ReindexRequest{}
-	resp, err := indexerService.Execute(ctx, req)
-	if err != nil {
-		fmt.Println(ui.FormatError("Reindex failed"))
-		return err
-	}
-
-	duration := time.Since(startTime)
-
-	fmt.Println(ui.FormatSuccess("Index rebuilt successfully!"))
-	fmt.Println()
-	fmt.Println(ui.RenderKeyValue("Total Notes", fmt.Sprintf("%d", resp.TotalNotes)))
-	fmt.Println(ui.RenderKeyValue("Total Connections", fmt.Sprintf("%d", resp.TotalConnections)))
-	fmt.Println(ui.RenderKeyValue("Duration", duration.Round(time.Millisecond).String()))
-	fmt.Println()
-	fmt.Println(ui.FormatMuted("Index saved to: " + appVault.IndexPath()))
-
-	return nil
-}
-
-func runReindexWatch(ctx context.Context) error {
 	// Create file watcher
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -90,8 +54,8 @@ func runReindexWatch(ctx context.Context) error {
 		return fmt.Errorf("failed to watch notes directory: %w", err)
 	}
 
-	if !reindexQuiet {
-		fmt.Println(ui.FormatRocket("Starting auto-reindex watcher..."))
+	if !daemonQuiet {
+		fmt.Println(ui.FormatRocket("Starting lx daemon..."))
 		fmt.Println(ui.FormatMuted("Watching: " + appVault.NotesPath))
 		fmt.Println(ui.FormatMuted("Press Ctrl+C to stop"))
 		fmt.Println()
@@ -109,7 +73,7 @@ func runReindexWatch(ctx context.Context) error {
 		}
 		needsReindex = false
 
-		if !reindexQuiet {
+		if !daemonQuiet {
 			fmt.Println(ui.FormatInfo("File changes detected, reindexing..."))
 		}
 
@@ -117,14 +81,14 @@ func runReindexWatch(ctx context.Context) error {
 		req := services.ReindexRequest{}
 		resp, err := indexerService.Execute(ctx, req)
 		if err != nil {
-			if !reindexQuiet {
+			if !daemonQuiet {
 				fmt.Println(ui.FormatError("Reindex failed: " + err.Error()))
 			}
 			log.Printf("Reindex error: %v", err)
 			return
 		}
 
-		if !reindexQuiet {
+		if !daemonQuiet {
 			fmt.Println(ui.FormatSuccess(fmt.Sprintf("Index updated (%d notes, %d connections)",
 				resp.TotalNotes, resp.TotalConnections)))
 		}
@@ -171,9 +135,9 @@ func runReindexWatch(ctx context.Context) error {
 			log.Printf("Watcher error: %v", err)
 
 		case <-ctx.Done():
-			if !reindexQuiet {
+			if !daemonQuiet {
 				fmt.Println()
-				fmt.Println(ui.FormatMuted("Watcher stopped"))
+				fmt.Println(ui.FormatMuted("Daemon stopped"))
 			}
 			return nil
 		}

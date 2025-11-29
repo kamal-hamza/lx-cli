@@ -69,6 +69,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Println(ui.FormatSuccess("Git ignore file (.gitignore) created"))
 	}
 
+	// Create Zed workspace settings
+	if err := createZedSettings(v); err != nil {
+		fmt.Println(ui.FormatWarning("Failed to create Zed settings: " + err.Error()))
+	} else {
+		fmt.Println(ui.FormatSuccess("Zed workspace settings (.zed/settings.json) created"))
+	}
+
 	// Check/Install Pandoc
 	if err := checkAndInstallPandoc(); err != nil {
 		// Warn but don't fail init, as it's optional for basic usage
@@ -84,7 +91,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println(ui.FormatMuted("  notes/      - Your LaTeX notes (.tex files)"))
 	fmt.Println(ui.FormatMuted("  templates/  - Your style files (.sty files)"))
 	fmt.Println(ui.FormatMuted("  cache/      - Compiled PDFs and build artifacts"))
-	fmt.Println(ui.FormatMuted("  assets/      - Static assets (images, bibliographies, etc.)"))
+	fmt.Println(ui.FormatMuted("  assets/     - Static assets (images, bibliographies, etc.)"))
+	fmt.Println(ui.FormatMuted("  .zed/       - Zed editor workspace settings"))
 	fmt.Println()
 	fmt.Println(ui.FormatInfo("Next steps:"))
 	fmt.Println(ui.FormatMuted("  1. Create your first note: lx new \"My First Note\""))
@@ -164,6 +172,9 @@ Thumbs.db
 *~
 *.bak
 
+# Keep Zed workspace settings (for lx-ls + texlab integration)
+!.zed/
+
 # LaTeX generated files (in case they leak out of cache)
 *.aux
 *.log
@@ -175,4 +186,34 @@ Thumbs.db
 `
 	path := filepath.Join(v.RootPath, ".gitignore")
 	return os.WriteFile(path, []byte(content), 0644)
+}
+
+func createZedSettings(v *vault.Vault) error {
+	// Create Zed workspace settings to enable both lx-ls and texlab
+	content := `{
+  "lsp": {
+    "texlab": {
+      "initialization_options": {
+        "diagnostics": {
+          "ignoredPatterns": []
+        }
+      }
+    }
+  },
+  "languages": {
+    "LaTeX": {
+      "language_servers": ["lx-ls", "texlab"]
+    }
+  }
+}
+`
+	// Create .zed directory
+	zedDir := filepath.Join(v.RootPath, ".zed")
+	if err := os.MkdirAll(zedDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .zed directory: %w", err)
+	}
+
+	// Write settings.json
+	settingsPath := filepath.Join(zedDir, "settings.json")
+	return os.WriteFile(settingsPath, []byte(content), 0644)
 }

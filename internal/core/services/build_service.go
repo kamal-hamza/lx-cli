@@ -7,19 +7,23 @@ import (
 
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/internal/core/ports"
+	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 // BuildService handles LaTeX compilation operations
 type BuildService struct {
-	noteRepo ports.Repository
-	compiler ports.Compiler
+	noteRepo     ports.Repository
+	compiler     ports.Compiler
+	preprocessor *Preprocessor
+	vault        *vault.Vault
 }
 
 // NewBuildService creates a new build service
-func NewBuildService(noteRepo ports.Repository, compiler ports.Compiler) *BuildService {
+func NewBuildService(noteRepo ports.Repository, compiler ports.Compiler, v *vault.Vault) *BuildService {
 	return &BuildService{
-		noteRepo: noteRepo,
-		compiler: compiler,
+		noteRepo:     noteRepo,
+		compiler:     compiler,
+		preprocessor: NewPreprocessor(noteRepo, v),
 	}
 }
 
@@ -54,6 +58,11 @@ func (s *BuildService) Execute(ctx context.Context, req BuildRequest) (*BuildRes
 	// Check if note exists
 	if !s.noteRepo.Exists(ctx, req.Slug) {
 		return nil, fmt.Errorf("note not found: %s", req.Slug)
+	}
+
+	_, pathErr := s.preprocessor.Process(req.Slug)
+	if pathErr != nil {
+		return nil, fmt.Errorf("preprocessing failed: %w", err)
 	}
 
 	// Compile the note
