@@ -10,14 +10,14 @@ import (
 
 	"github.com/kamal-hamza/lx-cli/internal/assets"
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/internal/core/services"
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
-
 	"github.com/spf13/cobra"
 )
 
 var (
-	exportFormat    string
-	exportOutputDir string
+	exportFormat string
+	exportOutput string
 )
 
 // ExportProfile defines how to handle different output formats
@@ -59,124 +59,187 @@ var exportProfiles = map[string]ExportProfile{
 }
 
 var exportCmd = &cobra.Command{
-	Use:   "export",
-	Short: "Export vault using Pandoc",
-	Long: `Export your notes to other formats using Pandoc.
+	Use:   "export [query]",
+	Short: "Export a note to Markdown, HTML, or Docx",
+	Long: `Export a note to other formats using Pandoc.
 
-By default, files are exported to the 'exports/' directory in your vault.
-You can specify a custom directory using the --output flag.
-
-Supported Formats:
-  - markdown (Default): Obsidian-compatible.
-  - html: Standalone HTML5.
-  - docx: Microsoft Word.
+This command:
+1. Preprocesses the note (resolves links and paths).
+2. Uses the asset repository to find images.
+3. Converts the note to the desired format.
 
 Examples:
-  lx export                   # Export to <vault>/exports
-  lx export -o ~/Desktop/dist # Export to custom folder
-  lx export -f docx           # Export as Word docs`,
-	Args: cobra.NoArgs,
+  lx export "neural networks" -f markdown
+  lx export graph -f html -o ./report.html
+  lx export bayes -f docx -o ~/Downloads  (Saves as ~/Downloads/bayes-nets.docx)`,
+	Args: cobra.ExactArgs(1),
 	RunE: runExport,
 }
 
 func init() {
 	exportCmd.Flags().StringVarP(&exportFormat, "format", "f", "markdown", "Output format (markdown, html, docx)")
-	exportCmd.Flags().StringVarP(&exportOutputDir, "output", "o", "", "Custom output directory (default: vault/exports)")
+	exportCmd.Flags().StringVarP(&exportOutput, "output", "o", "", "Output path (file or directory)")
 }
 
 func runExport(cmd *cobra.Command, args []string) error {
 	ctx := getContext()
+	query := args[0]
 
-	// 1. Validate Dependencies
-	if err := checkAndInstallPandoc(); err != nil {
-		return fmt.Errorf("pandoc check failed: %w", err)
+	// 0. Safety check
+	if preprocessor == nil {
+		return fmt.Errorf("internal error: preprocessor not initialized")
 	}
 
-	// 2. Validate Profile
+	// 1. Validate Profile
 	profile, ok := exportProfiles[exportFormat]
 	if !ok {
 		return fmt.Errorf("unsupported format: %s", exportFormat)
 	}
 
-	// 3. Determine Output Directory
-	outDir := exportOutputDir
-	if outDir == "" {
-		// Default: <vault_root>/exports
-		outDir = filepath.Join(appVault.RootPath, "exports")
+	// 2. Find the Note
+	req := services.SearchRequest{Query: query}
+	resp, err := listService.Search(ctx, req)
+	if err != nil {
+		return err
 	}
-
-	// Ensure absolute path for clarity in logs
-	if abs, err := filepath.Abs(outDir); err == nil {
-		outDir = abs
+	if resp.Total == 0 {
+		return fmt.Errorf("no note found matching '%s'", query)
 	}
+	note := resp.Notes[0]
 
-	if err := os.MkdirAll(outDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output dir: %w", err)
-	}
+	fmt.Println(ui.FormatRocket(fmt.Sprintf("Exporting %s...", note.Title)))
 
-	// 4. Create Temporary Lua Filter
-	tmpFile, err := os.CreateTemp("", "lx-filter-*.lua")
+	// 3. Setup Temp Filter
+	tmpFilter, err := os.CreateTemp("", "lx-filter-*.lua")
 	if err != nil {
 		return fmt.Errorf("failed to create temp filter: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.WriteString(assets.LinksFilter); err != nil {
+	defer os.Remove(tmpFilter.Name())
+	if _, err := tmpFilter.WriteString(assets.LinksFilter); err != nil {
 		return err
 	}
-	tmpFile.Close()
+	tmpFilter.Close()
 
-	// 5. Get Notes
-	headers, err := noteRepo.ListHeaders(ctx)
+	// 4. Determine Output Path
+	destPath := exportOutput
+	defaultFilename := fmt.Sprintf("%s.%s", note.Slug, profile.Extension)
+
+	if destPath == "" {
+		destPath = defaultFilename
+	} else {
+		// Check if provided path is a directory
+		info, err := os.Stat(destPath)
+		if err == nil && info.IsDir() {
+			destPath = filepath.Join(destPath, defaultFilename)
+		}
+	}
+
+	// 5. Convert
+	if err := convertNote(note, filepath.Dir(destPath), tmpFilter.Name(), profile); err != nil {
+		return err
+	}
+
+	// If the user provided a full path (not just a dir), convertNote writes to Dir/Slug.ext.
+	// We might need to rename it if the user wanted a specific filename.
+	// However, convertNote takes an output DIR and generates filename based on slug.
+	// Let's adjust usage of convertNote below or inside runExport.
+
+	// Actually, looking at the previous convertNote implementation:
+	// It takes `outDir` and writes `slug.ext` inside it.
+	// This clashes with `export -o my-file.docx`.
+
+	// FIX: Let's refactor the logic slightly here to be direct for single export.
+	// We will manually call the conversion logic here for flexibility,
+	// or update convertNote to take a full path.
+
+	// Let's stick to the previous robust single-file export logic:
+
+	// Preprocess
+	sourcePath, err := preprocessor.Process(note.Slug)
+	if err != nil {
+		return fmt.Errorf("preprocessing failed: %w", err)
+	}
+
+	// Pandoc
+	pandocArgs := []string{
+		sourcePath,
+		"-o", destPath,
+		"--lua-filter", tmpFilter.Name(),
+		"--resource-path=.:" + appVault.AssetsPath,
+		"--standalone",
+	}
+	pandocArgs = append(pandocArgs, profile.PandocArgs...)
+
+	// Metadata
+	pandocArgs = append(pandocArgs, "--metadata", fmt.Sprintf("title=%s", note.Title))
+	pandocArgs = append(pandocArgs, "--metadata", fmt.Sprintf("date=%s", note.Date))
+
+	c := exec.Command("pandoc", pandocArgs...)
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("pandoc failed: %w", err)
+	}
+
+	// Add frontmatter if needed (manual step for markdown)
+	if profile.AddFrontmatter {
+		content, _ := os.ReadFile(destPath)
+		frontmatter := fmt.Sprintf(`---
+title: "%s"
+date: %s
+slug: %s
+tags: [%s]
+---
+
+`, note.Title, note.Date, note.Slug, strings.Join(note.Tags, ", "))
+		os.WriteFile(destPath, append([]byte(frontmatter), content...), 0644)
+	}
+
+	fmt.Println(ui.FormatSuccess("Exported to: " + destPath))
+	return nil
+}
+
+// convertNote exports a single note to a specific directory (Used by export-all)
+func convertNote(h domain.NoteHeader, outDir, filterPath string, profile ExportProfile) error {
+	// 1. Preprocess
+	if preprocessor == nil {
+		return fmt.Errorf("preprocessor not initialized")
+	}
+	sourcePath, err := preprocessor.Process(h.Slug)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println(ui.FormatRocket(fmt.Sprintf("Exporting %d notes to %s...", len(headers), outDir)))
-
-	// 6. Process Notes
-	success := 0
-	for _, h := range headers {
-		if err := convertNote(h, outDir, tmpFile.Name(), profile); err != nil {
-			fmt.Println(ui.FormatWarning(fmt.Sprintf("Failed %s: %v", h.Slug, err)))
-			continue
-		}
-		success++
-		if success%10 == 0 {
-			fmt.Print(".")
-		}
-	}
-	fmt.Println()
-	fmt.Println(ui.FormatSuccess("Export complete!"))
-
-	return nil
-}
-
-func convertNote(h domain.NoteHeader, outDir, filterPath string, profile ExportProfile) error {
-	srcPath := appVault.GetNotePath(h.Filename)
+	// 2. Output Path
 	destPath := filepath.Join(outDir, h.Slug+"."+profile.Extension)
 
-	args := append([]string{}, profile.PandocArgs...)
-	args = append(args, "--lua-filter", filterPath)
+	// 3. Pandoc Args
+	args := []string{
+		sourcePath,
+		"-o", destPath,
+		"--lua-filter", filterPath,
+		"--resource-path=.:" + appVault.AssetsPath,
+		"--standalone",
+		"--metadata", fmt.Sprintf("title=%s", h.Title),
+		"--metadata", fmt.Sprintf("date=%s", h.Date),
+	}
+	args = append(args, profile.PandocArgs...)
 
-	// Add resource path so Pandoc finds images in assets/
-	args = append(args, "--resource-path", appVault.AssetsPath)
-
-	args = append(args, "--metadata", fmt.Sprintf("title=%s", h.Title))
-	args = append(args, "--metadata", fmt.Sprintf("date=%s", h.Date))
-	args = append(args, srcPath)
-
+	// 4. Run
 	cmd := exec.Command("pandoc", args...)
+	// Capture output to buffer to avoid spamming stdout in concurrent mode
 	var out bytes.Buffer
 	cmd.Stdout = &out
+	cmd.Stderr = &out
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("pandoc error: %w", err)
+		return fmt.Errorf("pandoc error on %s: %s", h.Slug, out.String())
 	}
 
-	result := out.String()
-
+	// 5. Frontmatter
 	if profile.AddFrontmatter {
+		content, _ := os.ReadFile(destPath)
 		frontmatter := fmt.Sprintf(`---
 title: "%s"
 date: %s
@@ -185,8 +248,8 @@ tags: [%s]
 ---
 
 `, h.Title, h.Date, h.Slug, strings.Join(h.Tags, ", "))
-		result = frontmatter + result
+		os.WriteFile(destPath, append([]byte(frontmatter), content...), 0644)
 	}
 
-	return os.WriteFile(destPath, []byte(result), 0644)
+	return nil
 }
