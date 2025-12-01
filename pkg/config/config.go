@@ -8,19 +8,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents the application configuration
 type Config struct {
-	// Compiler engine: "latexmk" (default) or "tectonic"
 	Compiler string `yaml:"compiler"`
 
-	// Default template to use when creating new notes
+	// Default template for standard notes
 	DefaultTemplate string `yaml:"default_template"`
 
-	// Editor command (uses $EDITOR if not set)
-	Editor string `yaml:"editor"`
+	// Template for daily notes (NEW)
+	DailyTemplate string `yaml:"daily_template"`
 
-	// Number of concurrent jobs for build-all
-	MaxWorkers int `yaml:"max_workers"`
+	Editor     string `yaml:"editor"`
+	MaxWorkers int    `yaml:"max_workers"`
 }
 
 // DefaultConfig returns a config with default values
@@ -28,6 +26,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		Compiler:        "latexmk",
 		DefaultTemplate: "",
+		DailyTemplate:   "", // Default to empty
 		Editor:          "",
 		MaxWorkers:      4,
 	}

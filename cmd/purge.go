@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strings"
@@ -70,17 +71,15 @@ func runPurge(cmd *cobra.Command, args []string) error {
 
 	// Check if force flag is set
 	if !purgeForce {
+		reader := bufio.NewReader(os.Stdin)
+
 		// First confirmation
 		var firstConfirmed bool
 		for {
 			fmt.Print(ui.StyleError.Render("Are you absolutely sure you want to delete the vault? (yes/no): "))
 
-			var response string
-			_, err := fmt.Scanln(&response)
+			response, err := reader.ReadString('\n')
 			if err != nil {
-				// Clear the buffer on input error
-				var discard string
-				fmt.Scanln(&discard)
 				fmt.Println(ui.FormatWarning("Invalid input. Please type 'yes' or 'no'."))
 				continue
 			}
@@ -112,12 +111,8 @@ func runPurge(cmd *cobra.Command, args []string) error {
 				ui.StyleBold.Render(appVault.RootPath))
 			fmt.Print(ui.StyleError.Render("> "))
 
-			var response string
-			_, err := fmt.Scanln(&response)
+			response, err := reader.ReadString('\n')
 			if err != nil {
-				// Clear the buffer on input error
-				var discard string
-				fmt.Scanln(&discard)
 				fmt.Println(ui.FormatWarning("Invalid input."))
 				continue
 			}

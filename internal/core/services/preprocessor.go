@@ -151,12 +151,32 @@ func (p *Preprocessor) resolveGraphics(content string) string {
 
 // ensureHyperref injects the hyperref package if missing
 func (p *Preprocessor) ensureHyperref(content string) string {
+	// Check if hyperref is already loaded in the note itself
 	if strings.Contains(content, "{hyperref}") {
 		return content
 	}
 
-	// Inject after \documentclass
-	docClassRegex := regexp.MustCompile(`(\\documentclass\[.*?\]\{.*?\})`)
+	// Check if any loaded templates contain hyperref
+	// Extract all \usepackage{...} statements
+	usepackageRegex := regexp.MustCompile(`\\usepackage\{([^}]+)\}`)
+	matches := usepackageRegex.FindAllStringSubmatch(content, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			packageName := match[1]
+			// Check if this is a .sty file in the templates directory
+			templatePath := filepath.Join(p.vault.TemplatesPath, packageName+".sty")
+			if templateContent, err := os.ReadFile(templatePath); err == nil {
+				// If the template file contains hyperref, don't inject it
+				if strings.Contains(string(templateContent), "hyperref") {
+					return content
+				}
+			}
+		}
+	}
+
+	// Inject after \documentclass (with or without optional parameters)
+	docClassRegex := regexp.MustCompile(`(\\documentclass(?:\[.*?\])?\{.*?\})`)
 
 	if docClassRegex.MatchString(content) {
 		// Add with standard options for nice links

@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
@@ -155,15 +157,19 @@ func runBuildNote(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 
 		// Prompt for selection with retry loop
+		reader := bufio.NewReader(os.Stdin)
 		var selection int
 		for {
 			fmt.Print(ui.StyleInfo.Render("Select a note (1-" + fmt.Sprintf("%d", searchResp.Total) + "): "))
 
-			_, err := fmt.Scanln(&selection)
+			input, err := reader.ReadString('\n')
 			if err != nil {
-				// Clear the buffer on input error
-				var discard string
-				fmt.Scanln(&discard)
+				fmt.Println(ui.FormatWarning("Invalid input. Please enter a number."))
+				continue
+			}
+
+			selection, err = strconv.Atoi(strings.TrimSpace(input))
+			if err != nil {
 				fmt.Println(ui.FormatWarning("Invalid input. Please enter a number."))
 				continue
 			}
@@ -312,15 +318,19 @@ func runBuildTemplate(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 
 		// Prompt for selection with retry loop
+		reader := bufio.NewReader(os.Stdin)
 		var selection int
 		for {
 			fmt.Print(ui.StyleInfo.Render("Select a template (1-" + fmt.Sprintf("%d", len(matches)) + "): "))
 
-			_, err := fmt.Scanln(&selection)
+			input, err := reader.ReadString('\n')
 			if err != nil {
-				// Clear the buffer on input error
-				var discard string
-				fmt.Scanln(&discard)
+				fmt.Println(ui.FormatWarning("Invalid input. Please enter a number."))
+				continue
+			}
+
+			selection, err = strconv.Atoi(strings.TrimSpace(input))
+			if err != nil {
 				fmt.Println(ui.FormatWarning("Invalid input. Please enter a number."))
 				continue
 			}

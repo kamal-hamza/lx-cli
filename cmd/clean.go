@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/kamal-hamza/lx-cli/internal/core/services"
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
 	"github.com/spf13/cobra"
 )
@@ -29,21 +31,42 @@ func init() {
 }
 
 func runClean(cmd *cobra.Command, args []string) error {
+	ctx := getContext()
 
 	// Mode 1: Prune Assets
 	if cleanPrune {
 		return runPruneAssets()
 	}
 
-	// Mode 2: Clean Cache (Default)
-	// (Existing logic for specific note or all)
+	// Mode 2: Clean Specific Note
 	if len(args) > 0 {
-		// Clean specific note artifacts
-		// ... (keep existing logic) ...
-		return nil // Placeholder for brevity
+		query := args[0]
+		req := services.SearchRequest{Query: query}
+		resp, err := listService.Search(ctx, req)
+		if err != nil {
+			return err
+		}
+
+		if resp.Total == 0 {
+			return fmt.Errorf("no note found matching '%s'", query)
+		}
+
+		// Select the top match
+		target := resp.Notes[0]
+		fmt.Printf("Cleaning artifacts for: %s (%s)...\n", ui.StyleBold.Render(target.Title), target.Slug)
+
+		// Use the compiler's Clean method to remove auxiliary files (.aux, .log, etc.)
+		// This respects the logic defined in internal/adapters/compiler/
+		if err := latexCompiler.Clean(ctx, target.Slug); err != nil {
+			fmt.Println(ui.FormatError("Failed to clean artifacts: " + err.Error()))
+			return err
+		}
+
+		fmt.Println(ui.FormatSuccess("Artifacts removed."))
+		return nil
 	}
 
-	// Clean entire cache
+	// Mode 3: Clean Entire Cache (Default)
 	fmt.Print(ui.StyleWarning.Render("Cleaning entire cache... "))
 	if err := appVault.CleanCache(); err != nil {
 		fmt.Println(ui.FormatError("Failed"))
@@ -114,11 +137,10 @@ func runPruneAssets() error {
 	}
 	fmt.Println()
 
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Print(ui.StyleError.Render("Delete these files? (y/n): "))
-	var response string
-	fmt.Scanln(&response)
-
-	if strings.ToLower(response) != "y" {
+	response, err := reader.ReadString('\n')
+	if err != nil || strings.ToLower(strings.TrimSpace(response)) != "y" {
 		fmt.Println("Cancelled.")
 		return nil
 	}
