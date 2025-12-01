@@ -2,9 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -219,36 +223,6 @@ func (m model) View() string {
 	return s.String()
 }
 
-func openEditorCmd(slug string) tea.Cmd {
-	return func() tea.Msg {
-		// Use the global vault instance to resolve path
-
-		// If explicit filename is needed we might need to look it up,
-		// but standard pattern usually works. For robustness, we could use repo.
-		// However, for TUI speed, direct construction is preferred if consistent.
-		// NOTE: Ideally we should look up the exact filename from the GraphData
-		// but 'slug.tex' or 'date-slug.tex' are the norms.
-		// Let's rely on OpenEditorAtLine finding it, or use the path resolution logic.
-		// Since we don't have the full filename in the graph node ID (just slug),
-		// we might need to search or assume.
-		// Let's assume standard note lookup via 'edit' command logic would be best,
-		// but for now, let's just trigger the open.
-
-		// We can't easily run the blocking OpenEditorAtLine here inside tea loop cleanly
-		// without suspending the program. BubbleTea has an Exec command for this.
-		// For simplicity in this fix, we will just print instructions or exit.
-		// BUT, to make it work:
-
-		// We will return a special message to the main loop to exit and open?
-		// Or just run it. Running interactive commands inside TUI is tricky.
-		// The standard way is usually tea.ExecProcess.
-
-		// For now, let's keep the existing structure which returns tea.Quit
-		// and relies on the user to open it, OR we could update it later to use Exec.
-		return tea.Quit
-	}
-}
-
 func unique(slice []string) []string {
 	keys := make(map[string]bool)
 	list := []string{}
@@ -259,4 +233,47 @@ func unique(slice []string) []string {
 		}
 	}
 	return list
+}
+
+func openEditorCmd(slug string) tea.Cmd {
+	return func() tea.Msg {
+		// 1. Resolve the file path
+		// Since the graph only has the slug, we try to construct the path.
+		// A more robust approach would be to look up the filename via the repo,
+		// but this mimics standard behavior in lx.
+		// We assume the standard naming convention "YYYYMMDD-slug.tex" or just "slug.tex"
+
+		// For robustness in this context, we will search for the file using a glob or list logic
+		// But since we can't easily access the repo inside this Cmd closure without globals,
+		// we will rely on `appVault` which is available in the `cmd` package.
+
+		matches, _ := filepath.Glob(filepath.Join(appVault.NotesPath, "*"+slug+".tex"))
+		targetPath := ""
+		if len(matches) > 0 {
+			targetPath = matches[0]
+		} else {
+			// Fallback: assume standard generation
+			targetPath = appVault.GetNotePath(domain.GenerateFilename(slug))
+		}
+
+		// 2. Prepare the Editor Command
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "vi"
+		}
+
+		c := exec.Command(editor, targetPath)
+		c.Stdin = os.Stdin
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+
+		// 3. Execute via Bubble Tea's ExecProcess
+		// This handles suspending/resuming the TUI automatically
+		return tea.ExecProcess(c, func(err error) tea.Msg {
+			if err != nil {
+				return fmt.Errorf("failed to open editor: %w", err)
+			}
+			return nil
+		})
+	}
 }

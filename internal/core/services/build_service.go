@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/kamal-hamza/lx-cli/internal/adapters/compiler"
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/internal/core/ports"
+	"github.com/kamal-hamza/lx-cli/pkg/latexparser"
 	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
@@ -64,6 +66,15 @@ type BuildAllResponse struct {
 	Results   []BuildResponse
 }
 
+// BuildResultDetails contains detailed compilation results including parsed output
+type BuildResultDetails struct {
+	Slug    string
+	Success bool
+	Parsed  *latexparser.ParseResult
+	Output  string
+	Error   error
+}
+
 // Execute builds a single note
 func (s *BuildService) Execute(ctx context.Context, req BuildRequest) (*BuildResponse, error) {
 	// Check if note exists
@@ -95,6 +106,78 @@ func (s *BuildService) Execute(ctx context.Context, req BuildRequest) (*BuildRes
 		OutputPath: outputPath,
 		Success:    true,
 		Error:      nil,
+	}, nil
+}
+
+// ExecuteWithDetails builds a single note and returns detailed compilation information
+func (s *BuildService) ExecuteWithDetails(ctx context.Context, req BuildRequest) (*BuildResultDetails, error) {
+	// Check if note exists
+	if !s.noteRepo.Exists(ctx, req.Slug) {
+		return nil, fmt.Errorf("note not found: %s", req.Slug)
+	}
+
+	// 1. Preprocess the note
+	preprocessedPath, err := s.preprocessor.Process(req.Slug)
+	if err != nil {
+		return &BuildResultDetails{
+			Slug:    req.Slug,
+			Success: false,
+			Error:   fmt.Errorf("preprocessing failed: %w", err),
+			Parsed: &latexparser.ParseResult{
+				Errors: []latexparser.Issue{
+					{
+						Level:   latexparser.LevelError,
+						Message: fmt.Sprintf("Preprocessing failed: %v", err),
+					},
+				},
+			},
+		}, err
+	}
+
+	// 2. Compile the preprocessed file with detailed output
+	// Try to cast to LatexmkCompiler to get detailed results
+	if latexmkCompiler, ok := s.compiler.(*compiler.LatexmkCompiler); ok {
+		result := latexmkCompiler.CompileWithOutput(ctx, preprocessedPath, []string{})
+
+		// Even if there was an error, if we have a PDF, consider it a success
+		var buildErr error
+		if !result.Parsed.HasPDF {
+			buildErr = fmt.Errorf("compilation failed")
+		}
+
+		return &BuildResultDetails{
+			Slug:    req.Slug,
+			Success: result.Parsed.HasPDF,
+			Parsed:  result.Parsed,
+			Output:  result.Output,
+			Error:   buildErr,
+		}, buildErr
+	}
+
+	// Fallback for other compiler types
+	err = s.compiler.Compile(ctx, preprocessedPath, []string{})
+	if err != nil {
+		return &BuildResultDetails{
+			Slug:    req.Slug,
+			Success: false,
+			Error:   err,
+			Parsed: &latexparser.ParseResult{
+				Errors: []latexparser.Issue{
+					{
+						Level:   latexparser.LevelError,
+						Message: err.Error(),
+					},
+				},
+			},
+		}, err
+	}
+
+	return &BuildResultDetails{
+		Slug:    req.Slug,
+		Success: true,
+		Parsed: &latexparser.ParseResult{
+			HasPDF: true,
+		},
 	}, nil
 }
 

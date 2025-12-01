@@ -55,11 +55,18 @@ func runInit(cmd *cobra.Command, args []string) error {
 		// Don't fail - config is optional
 	}
 
-	// Create .latexmkrc file
+	// Create .latexmkrc file for notes directory
 	if err := createLatexmkrc(v); err != nil {
 		fmt.Println(ui.FormatWarning("Failed to create .latexmkrc: " + err.Error()))
 	} else {
 		fmt.Println(ui.FormatSuccess("Editor config (.latexmkrc) created"))
+	}
+
+	// Create .latexmkrc file for templates directory
+	if err := createTemplatesLatexmkrc(v); err != nil {
+		fmt.Println(ui.FormatWarning("Failed to create templates .latexmkrc: " + err.Error()))
+	} else {
+		fmt.Println(ui.FormatSuccess("Templates editor config (.latexmkrc) created"))
 	}
 
 	// Create .gitignore file
@@ -145,6 +152,28 @@ if ($^O eq 'MSWin32') {
 }
 `
 	path := filepath.Join(v.NotesPath, ".latexmkrc")
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
+func createTemplatesLatexmkrc(v *vault.Vault) error {
+	// For templates directory, redirect output to cache and include assets
+	content := `# LX Editor Configuration (Templates Directory)
+$out_dir = '../cache';
+$pdf_mode = 1;
+
+# Recursive search for assets
+my $assets_path = '../assets//';
+
+# Platform-specific path separator
+my $sep = ($^O eq 'MSWin32') ? ';' : ':';
+
+if ($^O eq 'MSWin32') {
+    $ENV{'TEXINPUTS'} = $assets_path . $sep . $ENV{'TEXINPUTS'};
+} else {
+    $ENV{'TEXINPUTS'} = $assets_path . $sep . $ENV{'TEXINPUTS'};
+}
+`
+	path := filepath.Join(v.TemplatesPath, ".latexmkrc")
 	return os.WriteFile(path, []byte(content), 0644)
 }
 

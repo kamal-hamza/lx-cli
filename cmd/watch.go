@@ -11,6 +11,7 @@ import (
 
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/internal/core/services"
+	"github.com/kamal-hamza/lx-cli/pkg/latexparser"
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
 )
 
@@ -88,13 +89,48 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 	// Helper to handle build and opening
 	handleBuild := func() {
-		if err := triggerBuild(selectedNote.Slug); err != nil {
+		result, err := triggerBuildWithDetails(selectedNote.Slug)
+
+		if err != nil {
+			// Show a clean error message
 			fmt.Println(ui.FormatError("Build failed: " + err.Error()))
+
+			// If we have parsed errors, show them
+			if result != nil && result.Parsed != nil && len(result.Parsed.Errors) > 0 {
+				fmt.Println(ui.FormatMuted("\nErrors found:"))
+				// Show up to 5 most relevant errors
+				maxErrors := 5
+				for i, issue := range result.Parsed.GetCriticalIssues() {
+					if i >= maxErrors {
+						remaining := len(result.Parsed.Errors) - maxErrors
+						fmt.Println(ui.FormatMuted(fmt.Sprintf("... and %d more error(s)", remaining)))
+						break
+					}
+					fmt.Println("  " + latexparser.FormatIssue(issue))
+				}
+			}
 		} else {
-			fmt.Printf("\r%s Rebuilt %s at %s\n",
-				ui.FormatSuccess("✓"),
-				selectedNote.Slug,
-				time.Now().Format("15:04:05"))
+			// Success case
+			timestamp := time.Now().Format("15:04:05")
+
+			if result != nil && result.Parsed != nil {
+				summary := result.Parsed.GetSummary()
+				fmt.Printf("\r%s %s at %s\n", summary, selectedNote.Slug, timestamp)
+
+				// Show warnings if any (but limit to 3)
+				if len(result.Parsed.Warnings) > 0 && len(result.Parsed.Warnings) <= 3 {
+					for _, warning := range result.Parsed.Warnings {
+						fmt.Println("  " + latexparser.FormatIssue(warning))
+					}
+				} else if len(result.Parsed.Warnings) > 3 {
+					fmt.Println(ui.FormatMuted(fmt.Sprintf("  ⚠️  %d warning(s) - check log for details", len(result.Parsed.Warnings))))
+				}
+			} else {
+				fmt.Printf("\r%s Rebuilt %s at %s\n",
+					ui.FormatSuccess("✓"),
+					selectedNote.Slug,
+					timestamp)
+			}
 
 			// Open viewer on first success
 			if !hasOpenedViewer {
@@ -166,17 +202,26 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 // triggerBuild wraps the service call to keep the main loop clean
 func triggerBuild(slug string) error {
+	result, err := triggerBuildWithDetails(slug)
+	if err != nil {
+		return err
+	}
+	if result != nil && !result.Success {
+		return fmt.Errorf("build failed")
+	}
+	return nil
+}
+
+// triggerBuildWithDetails returns detailed build results for better error reporting
+func triggerBuildWithDetails(slug string) (*services.BuildResultDetails, error) {
 	ctx := getContext()
 	req := services.BuildRequest{Slug: slug}
 
 	// This now calls the BuildService, which triggers Preprocessor -> Compiler
-	resp, err := buildService.Execute(ctx, req)
+	result, err := buildService.ExecuteWithDetails(ctx, req)
 	if err != nil {
-		return err
+		return result, err
 	}
 
-	if !resp.Success {
-		return resp.Error
-	}
-	return nil
+	return result, nil
 }
