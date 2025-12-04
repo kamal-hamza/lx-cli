@@ -5,20 +5,20 @@
 class Lx < Formula
   desc "A beautiful LaTeX notes manager"
   homepage "https://github.com/kamal-hamza/lx-cli"
-  version "0.1.4"
+  version "0.1.5"
 
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.4/lx_0.1.4_darwin_amd64.tar.gz"
-      sha256 "8b25256e359a2a8af462e53ac986aff57bef778765cdab6a97053edf70bb4052"
+      url "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.5/lx_0.1.5_darwin_amd64.tar.gz"
+      sha256 "a0445231b4bc56d5b4763d3839fc5b8eb805e829d48b77ed991be00ac49735de"
 
       def install
         bin.install "lx"
       end
     end
     if Hardware::CPU.arm?
-      url "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.4/lx_0.1.4_darwin_arm64.tar.gz"
-      sha256 "8ec5ff2916f1c787742c168f59e03732a8cef94a3e810457a7330979da4097dc"
+      url "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.5/lx_0.1.5_darwin_arm64.tar.gz"
+      sha256 "8761796422dc99f7659d38aa3a8c7c6110b620ed6f72324369d87122b55cfea5"
 
       def install
         bin.install "lx"
@@ -28,15 +28,15 @@ class Lx < Formula
 
   on_linux do
     if Hardware::CPU.intel? && Hardware::CPU.is_64_bit?
-      url "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.4/lx_0.1.4_linux_amd64.tar.gz"
-      sha256 "c370e532b1f2b13c97f67b02188a5fe825dda6f173bbaf11e466b3f20d3ef503"
+      url "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.5/lx_0.1.5_linux_amd64.tar.gz"
+      sha256 "14fa4177ba99d3e485f1326b325902895bf4af3d88fe0ec235a0cbc7d0e6c335"
       def install
         bin.install "lx"
       end
     end
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-      url "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.4/lx_0.1.4_linux_arm64.tar.gz"
-      sha256 "3fa8df97721bf73681149aeea6a9ae974312d159403397d9f50e72e391f18277"
+      url "https://github.com/kamal-hamza/lx-cli/releases/download/v0.1.5/lx_0.1.5_linux_arm64.tar.gz"
+      sha256 "823170576916ea9d7980ceae9964ba9e240e4601d791346a95654efeee29f376"
       def install
         bin.install "lx"
       end
