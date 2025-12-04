@@ -63,11 +63,30 @@ func (p *Preprocessor) Process(slug string) (string, error) {
 	return tempPath, nil
 }
 
-// resolveReferences converts \ref{slug} to \href{./slug.pdf}{Title}
+// resolveReferences converts \lxnote{slug} and \ref{slug} (deprecated) to \href{./slug.pdf}{Title}
 func (p *Preprocessor) resolveReferences(content string, slugMap map[string]string) string {
-	refRegex := regexp.MustCompile(`\\ref\{([^}]+)\}`)
+	// Primary: \lxnote{slug} - the new, recommended way to reference notes
+	lxnoteRegex := regexp.MustCompile(`\\lxnote\{([^}]+)\}`)
+	content = lxnoteRegex.ReplaceAllStringFunc(content, func(match string) string {
+		submatch := lxnoteRegex.FindStringSubmatch(match)
+		if len(submatch) < 2 {
+			return match
+		}
+		targetSlug := submatch[1]
 
-	return refRegex.ReplaceAllStringFunc(content, func(match string) string {
+		// \lxnote{} MUST refer to a note - error if not found
+		if title, exists := slugMap[targetSlug]; exists {
+			return fmt.Sprintf(`\href{./%s.pdf}{%s}`, targetSlug, title)
+		}
+
+		// Note not found - render as warning text
+		return fmt.Sprintf(`\textbf{[BROKEN LINK: %s]}`, targetSlug)
+	})
+
+	// Legacy: \ref{slug} - deprecated, only converts if it matches a note slug
+	// This provides backward compatibility but will be removed in a future version
+	refRegex := regexp.MustCompile(`\\ref\{([^}]+)\}`)
+	content = refRegex.ReplaceAllStringFunc(content, func(match string) string {
 		submatch := refRegex.FindStringSubmatch(match)
 		if len(submatch) < 2 {
 			return match
@@ -84,6 +103,8 @@ func (p *Preprocessor) resolveReferences(content string, slugMap map[string]stri
 		// It's not a note (likely a standard internal label like \label{fig:x}), leave it alone
 		return match
 	})
+
+	return content
 }
 
 // resolveInputs converts relative \input{...} paths to absolute paths

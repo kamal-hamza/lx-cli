@@ -196,27 +196,43 @@ func runBuildNote(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println(ui.FormatRocket("Compiling LaTeX..."))
-	buildResp, err := buildService.Execute(ctx, buildReq)
+
+	// Get detailed build results
+	buildDetails, err := buildService.ExecuteWithDetails(ctx, buildReq)
 	if err != nil {
 		fmt.Println(ui.FormatError("Build failed"))
 		fmt.Println()
-		fmt.Println(ui.FormatMuted("Error details:"))
-		fmt.Println(err.Error())
+		if buildDetails != nil && buildDetails.Parsed != nil {
+			fmt.Println(buildDetails.Parsed.FormatIssues())
+		} else {
+			fmt.Println(ui.FormatMuted("Error details:"))
+			fmt.Println(err.Error())
+		}
 		return err
 	}
 
-	// Success
-	fmt.Println(ui.FormatSuccess("Build completed successfully!"))
+	// Success - show summary
+	if buildDetails.Parsed != nil {
+		fmt.Println(buildDetails.Parsed.GetSummary())
+
+		// Show warnings if any
+		if len(buildDetails.Parsed.Warnings) > 0 {
+			fmt.Println(ui.FormatMuted(fmt.Sprintf("\n⚠️  %d warning(s) (LaTeX warnings can usually be ignored)", len(buildDetails.Parsed.Warnings))))
+		}
+	} else {
+		fmt.Println(ui.FormatSuccess("Build completed successfully!"))
+	}
+
 	fmt.Println()
-	fmt.Println(ui.RenderKeyValue("Output", buildResp.OutputPath))
+	fmt.Println(ui.RenderKeyValue("Output", buildDetails.OutputPath))
 	fmt.Println()
 
 	// Open PDF if requested
 	if buildOpen {
 		fmt.Println(ui.FormatInfo("Opening PDF..."))
-		if err := OpenFileWithDefaultApp(buildResp.OutputPath); err != nil {
+		if err := OpenFileWithDefaultApp(buildDetails.OutputPath); err != nil {
 			fmt.Println(ui.FormatWarning("Failed to open PDF: " + err.Error()))
-			fmt.Println(ui.FormatInfo("You can manually open: " + buildResp.OutputPath))
+			fmt.Println(ui.FormatInfo("You can manually open: " + buildDetails.OutputPath))
 		}
 	}
 
@@ -368,22 +384,35 @@ Test document for template validation.
 
 	fmt.Println(ui.FormatRocket("Compiling template test..."))
 
-	// Use the updated Compiler directly
-	// This ensures we get the correct environment (assets included in TEXINPUTS)
-	if err := latexCompiler.Compile(ctx, testFile, nil); err != nil {
+	// Use the compiler with detailed output
+	result := latexCompiler.CompileWithOutput(ctx, testFile, nil)
+
+	if !result.Success {
 		fmt.Println(ui.FormatError("Template compilation failed!"))
 		fmt.Println()
-		fmt.Println(ui.StyleMuted.Render("Error details:"))
-		fmt.Println(err.Error())
+		if result.Parsed != nil {
+			fmt.Println(result.Parsed.FormatIssues())
+		} else {
+			fmt.Println(ui.StyleMuted.Render("Error details:"))
+			fmt.Println(result.Output)
+		}
 		return fmt.Errorf("template has errors")
 	}
 
-	// Clean up the PDF artifact (kept cleaning from original logic)
+	// Clean up the PDF artifact
 	pdfFile := appVault.GetCachePath("template-test.pdf")
 	os.Remove(pdfFile)
 
-	fmt.Println(ui.FormatSuccess("Template compiled successfully!"))
-	fmt.Println(ui.FormatInfo("No syntax errors found in template: " + selectedTemplate.Name))
+	// Show results
+	if result.Parsed != nil {
+		fmt.Println(result.Parsed.GetSummary())
+		if len(result.Parsed.Warnings) > 0 {
+			fmt.Println(ui.FormatMuted(fmt.Sprintf("(%d warning(s) - this is normal)", len(result.Parsed.Warnings))))
+		}
+	} else {
+		fmt.Println(ui.FormatSuccess("Template compiled successfully!"))
+	}
+	fmt.Println(ui.FormatInfo("Template is valid: " + selectedTemplate.Name))
 
 	return nil
 }

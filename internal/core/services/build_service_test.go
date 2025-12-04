@@ -76,8 +76,12 @@ func TestBuildService_Execute_NoteNotFound(t *testing.T) {
 		t.Fatal("expected error for non-existent note")
 	}
 
-	if resp != nil {
-		t.Errorf("expected nil response, got %+v", resp)
+	if resp == nil {
+		t.Fatal("expected response even on error")
+	}
+
+	if resp.Success {
+		t.Error("expected Success to be false")
 	}
 
 	if len(mockPreprocessor.GetCalls()) != 0 {
@@ -103,8 +107,12 @@ func TestBuildService_Execute_PreprocessingFailure(t *testing.T) {
 		t.Fatal("expected error from preprocessing failure")
 	}
 
-	if resp != nil {
-		t.Error("expected nil response on preprocessing failure")
+	if resp == nil {
+		t.Fatal("expected response even on error")
+	}
+
+	if resp.Success {
+		t.Error("expected Success to be false")
 	}
 
 	if len(mockCompiler.GetCalls()) != 0 {

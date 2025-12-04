@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/kamal-hamza/lx-cli/pkg/latexparser"
 	"github.com/kamal-hamza/lx-cli/pkg/vault"
@@ -24,37 +25,40 @@ func NewLatexmkCompiler(vault *vault.Vault) *LatexmkCompiler {
 
 // CompileResult holds compilation output and parsed issues
 type CompileResult struct {
-	Success bool
-	Output  string
-	Parsed  *latexparser.ParseResult
+	Success    bool
+	Output     string
+	Parsed     *latexparser.ParseResult
+	PDFPath    string
+	ErrorCount int
 }
 
 // Compile compiles a note to PDF using latexmk
+// The primary success criterion is: Does the PDF file exist?
+// We use a multi-layered verification approach for maximum robustness
 func (c *LatexmkCompiler) Compile(ctx context.Context, inputPath string, env []string) error {
 	result := c.CompileWithOutput(ctx, inputPath, env)
 
-	// If PDF was generated, consider it a success even if latexmk returned an error
-	if result.Parsed.HasPDF {
+	// CRITICAL: Check if PDF actually exists on disk
+	// This is the most reliable success indicator
+	if result.PDFPath != "" && fileExists(result.PDFPath) {
+		// PDF exists! Compilation was successful.
+		// Even if latexmk returned errors, if we have a PDF, we succeeded.
 		return nil
 	}
 
-	// If no PDF was generated and there are errors, return a formatted error
-	if len(result.Parsed.Errors) > 0 {
-		return fmt.Errorf("compilation failed with %d error(s)", len(result.Parsed.Errors))
+	// If we get here, no PDF was generated - this is a failure
+	if result.Parsed.IsFatalError() {
+		return fmt.Errorf("compilation failed: %s", result.Parsed.GetSummary())
 	}
 
-	// Fallback to original output if parsing didn't find anything
-	if !result.Success {
-		return fmt.Errorf("compilation failed:\n%s", result.Output)
-	}
-
-	return nil
+	// Fallback error message
+	return fmt.Errorf("compilation failed: no PDF generated")
 }
 
 // CompileWithOutput compiles and returns detailed output for better error reporting
 func (c *LatexmkCompiler) CompileWithOutput(ctx context.Context, inputPath string, env []string) *CompileResult {
-	// Validate input
-	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
+	// Validate input file exists
+	if !fileExists(inputPath) {
 		return &CompileResult{
 			Success: false,
 			Output:  fmt.Sprintf("source file not found: %s", inputPath),
@@ -66,21 +70,51 @@ func (c *LatexmkCompiler) CompileWithOutput(ctx context.Context, inputPath strin
 					},
 				},
 			},
+			ErrorCount: 1,
 		}
 	}
 
-	// Prepare latexmk command
-	// -pdf: generate PDF using pdflatex
-	// -interaction=nonstopmode: don't stop on errors, keep going
-	// -file-line-error: better error messages with file:line: format
-	// -halt-on-error: removed to allow continuation despite errors
-	// -recorder: track file dependencies
-	// -g: force rebuild (ignore timestamps)
-	// -f: force completion even when errors occur
+	// Determine expected PDF output path
+	expectedPDFPath := c.GetOutputPathFromInput(inputPath)
+
+	// Run latexmk compilation
+	output, _ := c.runLatexmk(ctx, inputPath, env)
+
+	// Parse the output for errors and warnings
+	parsed := latexparser.ParseLatexOutput(output)
+
+	// CRITICAL: Verify PDF exists on disk (most reliable check)
+	pdfExists := fileExists(expectedPDFPath)
+	if pdfExists {
+		parsed.HasPDF = true
+		parsed.PDFPath = expectedPDFPath
+	}
+
+	// Build result
+	result := &CompileResult{
+		Success:    pdfExists, // Success is defined by PDF existence
+		Output:     output,
+		Parsed:     parsed,
+		PDFPath:    expectedPDFPath,
+		ErrorCount: len(parsed.Errors),
+	}
+
+	return result
+}
+
+// runLatexmk executes the latexmk command with proper configuration
+func (c *LatexmkCompiler) runLatexmk(ctx context.Context, inputPath string, env []string) (string, bool) {
+	// latexmk flags:
+	// -pdf              : generate PDF using pdflatex
+	// -g                : force rebuild (ignore timestamps)
+	// -f                : force completion even when errors occur (important!)
+	// -interaction=...  : don't stop on errors, keep going
+	// -file-line-error  : better error messages with file:line: format
+	// -recorder         : track file dependencies
 	args := []string{
 		"-pdf",
 		"-g",
-		"-f",
+		"-f", // CRITICAL: Force continuation despite errors
 		"-interaction=nonstopmode",
 		"-file-line-error",
 		"-recorder",
@@ -89,54 +123,71 @@ func (c *LatexmkCompiler) CompileWithOutput(ctx context.Context, inputPath strin
 
 	cmd := exec.CommandContext(ctx, "latexmk", args...)
 
-	// Set working directory to notes path so latexmk can find .latexmkrc
-	// The .latexmkrc file configures output to ../cache and TEXINPUTS paths
+	// Set working directory to notes path
+	// The .latexmkrc file in notes/ configures output to ../cache
 	cmd.Dir = c.vault.NotesPath
 
-	// Prepare environment
+	// Prepare environment with TEXINPUTS for template/asset discovery
 	cmdEnv := os.Environ()
-
-	// Add TEXINPUTS for template discovery
-	// We append NotesPath and AssetsPath to TEXINPUTS so that any relative
-	// imports that weren't caught by the preprocessor (or implicit ones) still work.
-	texinputs := c.vault.GetTexInputsEnv()
-	// Format: .:templates//:assets//:notes//:
-	// Note: GetTexInputsEnv typically returns ".:templates//:" so we append to it
-	texinputs = fmt.Sprintf("%s%s//:%s//:", texinputs, c.vault.AssetsPath, c.vault.NotesPath)
-
+	texinputs := c.buildTexInputs()
 	cmdEnv = append(cmdEnv, "TEXINPUTS="+texinputs)
 	cmdEnv = append(cmdEnv, env...)
-
 	cmd.Env = cmdEnv
 
-	// Capture output
+	// Capture combined output (stdout + stderr)
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)
 
-	// Parse the output for meaningful errors/warnings
-	parsed := latexparser.ParseLatexOutput(outputStr)
+	// Note: latexmk may return non-zero exit code even if PDF was generated
+	// That's why we verify PDF existence separately
+	cmdSuccess := (err == nil)
 
-	return &CompileResult{
-		Success: err == nil,
-		Output:  outputStr,
-		Parsed:  parsed,
-	}
+	return outputStr, cmdSuccess
 }
 
-// GetOutputPath returns the path to the compiled PDF
+// buildTexInputs constructs the TEXINPUTS environment variable
+// This tells LaTeX where to find templates, assets, and other includes
+func (c *LatexmkCompiler) buildTexInputs() string {
+	// Format: .:templates//:assets//:notes//:
+	// The // means "search recursively"
+	// The trailing : means "also search default locations"
+
+	base := c.vault.GetTexInputsEnv() // Usually returns ".:templates//:"
+
+	// Add assets and notes directories
+	parts := []string{
+		base,
+		c.vault.AssetsPath + "//",
+		c.vault.NotesPath + "//",
+	}
+
+	return strings.Join(parts, ":")
+}
+
+// GetOutputPath returns the path to the compiled PDF for a given slug
 func (c *LatexmkCompiler) GetOutputPath(slug string) string {
-	// The preprocessor writes "slug.tex" to cache, so output is "slug.pdf" in the cache dir
+	// The preprocessor writes "slug.tex" to cache, so output is "slug.pdf" in cache
 	return c.vault.GetCachePath(slug + ".pdf")
+}
+
+// GetOutputPathFromInput derives the PDF path from the input .tex path
+func (c *LatexmkCompiler) GetOutputPathFromInput(inputPath string) string {
+	if !strings.HasSuffix(inputPath, ".tex") {
+		return ""
+	}
+
+	// Replace .tex extension with .pdf, keep same directory
+	return strings.TrimSuffix(inputPath, ".tex") + ".pdf"
 }
 
 // Clean removes auxiliary files for a specific note
 func (c *LatexmkCompiler) Clean(ctx context.Context, slug string) error {
-	// We target the preprocessed/cached file for cleaning
+	// Target the preprocessed/cached file for cleaning
 	filename := slug + ".tex"
 	targetPath := c.vault.GetCachePath(filename)
 
 	args := []string{
-		"-C",
+		"-C", // Clean up auxiliary files
 		targetPath,
 	}
 
@@ -154,4 +205,13 @@ func (c *LatexmkCompiler) Clean(ctx context.Context, slug string) error {
 func IsAvailable() bool {
 	_, err := exec.LookPath("latexmk")
 	return err == nil
+}
+
+// fileExists checks if a file exists and is a regular file
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode().IsRegular()
 }
