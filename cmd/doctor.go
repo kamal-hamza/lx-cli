@@ -110,19 +110,35 @@ func runDoctor(cmd *cobra.Command, args []string) {
 		}
 
 		brokenCount := 0
-		linkRegex := regexp.MustCompile(`\\ref\{([^}]+)\}`)
+		// Check both \lxnote{} (new) and \ref{} (deprecated)
+		lxnoteRegex := regexp.MustCompile(`\\lxnote\{([^}]+)\}`)
+		refRegex := regexp.MustCompile(`\\ref\{([^}]+)\}`)
 
 		for _, h := range headers {
 			content, _ := os.ReadFile(appVault.GetNotePath(h.Filename))
-			matches := linkRegex.FindAllStringSubmatch(string(content), -1)
-			for _, m := range matches {
+			contentStr := string(content)
+
+			// Check \lxnote{} references
+			lxnoteMatches := lxnoteRegex.FindAllStringSubmatch(contentStr, -1)
+			for _, m := range lxnoteMatches {
 				targetSlug := m[1]
 				if !slugMap[targetSlug] {
 					if brokenCount == 0 {
 						fmt.Println()
 					}
-					fmt.Printf("    %s -> %s (Missing)\n", h.Slug, targetSlug)
+					fmt.Printf("    %s -> %s (Missing) [\\lxnote]\n", h.Slug, targetSlug)
 					brokenCount++
+				}
+			}
+
+			// Check \ref{} references (only if they match note slugs)
+			refMatches := refRegex.FindAllStringSubmatch(contentStr, -1)
+			for _, m := range refMatches {
+				targetSlug := m[1]
+				if slugMap[targetSlug] {
+					// This is a note reference using deprecated \ref{}
+					// Don't count as broken, but we could warn about deprecation
+					continue
 				}
 			}
 		}

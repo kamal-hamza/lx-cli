@@ -68,15 +68,35 @@ type BuildAllResponse struct {
 
 // BuildResultDetails contains detailed compilation results including parsed output
 type BuildResultDetails struct {
-	Slug    string
-	Success bool
-	Parsed  *latexparser.ParseResult
-	Output  string
-	Error   error
+	Slug       string
+	Success    bool
+	Parsed     *latexparser.ParseResult
+	Output     string
+	OutputPath string
+	Error      error
 }
 
-// Execute builds a single note
+// Execute builds a single note and returns basic response
 func (s *BuildService) Execute(ctx context.Context, req BuildRequest) (*BuildResponse, error) {
+	details, err := s.ExecuteWithDetails(ctx, req)
+	if err != nil {
+		return &BuildResponse{
+			Slug:    req.Slug,
+			Success: false,
+			Error:   err,
+		}, err
+	}
+
+	return &BuildResponse{
+		Slug:       details.Slug,
+		OutputPath: details.OutputPath,
+		Success:    details.Success,
+		Error:      details.Error,
+	}, nil
+}
+
+// ExecuteWithDetails builds a single note and returns detailed compilation results
+func (s *BuildService) ExecuteWithDetails(ctx context.Context, req BuildRequest) (*BuildResultDetails, error) {
 	// Check if note exists
 	if !s.noteRepo.Exists(ctx, req.Slug) {
 		return nil, fmt.Errorf("note not found: %s", req.Slug)
@@ -86,99 +106,53 @@ func (s *BuildService) Execute(ctx context.Context, req BuildRequest) (*BuildRes
 	// This resolves links/paths and writes a compilable .tex file to the cache directory
 	preprocessedPath, err := s.preprocessor.Process(req.Slug)
 	if err != nil {
-		return nil, fmt.Errorf("preprocessing failed: %w", err)
-	}
-
-	// 2. Compile the preprocessed file
-	err = s.compiler.Compile(ctx, preprocessedPath, []string{})
-	if err != nil {
-		return &BuildResponse{
-			Slug:    req.Slug,
-			Success: false,
-			Error:   err,
-		}, err
-	}
-
-	outputPath := s.compiler.GetOutputPath(req.Slug)
-
-	return &BuildResponse{
-		Slug:       req.Slug,
-		OutputPath: outputPath,
-		Success:    true,
-		Error:      nil,
-	}, nil
-}
-
-// ExecuteWithDetails builds a single note and returns detailed compilation information
-func (s *BuildService) ExecuteWithDetails(ctx context.Context, req BuildRequest) (*BuildResultDetails, error) {
-	// Check if note exists
-	if !s.noteRepo.Exists(ctx, req.Slug) {
-		return nil, fmt.Errorf("note not found: %s", req.Slug)
-	}
-
-	// 1. Preprocess the note
-	preprocessedPath, err := s.preprocessor.Process(req.Slug)
-	if err != nil {
 		return &BuildResultDetails{
 			Slug:    req.Slug,
 			Success: false,
 			Error:   fmt.Errorf("preprocessing failed: %w", err),
-			Parsed: &latexparser.ParseResult{
-				Errors: []latexparser.Issue{
-					{
-						Level:   latexparser.LevelError,
-						Message: fmt.Sprintf("Preprocessing failed: %v", err),
-					},
-				},
-			},
-		}, err
+		}, fmt.Errorf("preprocessing failed: %w", err)
 	}
 
 	// 2. Compile the preprocessed file with detailed output
-	// Try to cast to LatexmkCompiler to get detailed results
+	// Use type assertion to access LatexmkCompiler's detailed results
+	var compileResult *compiler.CompileResult
 	if latexmkCompiler, ok := s.compiler.(*compiler.LatexmkCompiler); ok {
-		result := latexmkCompiler.CompileWithOutput(ctx, preprocessedPath, []string{})
+		compileResult = latexmkCompiler.CompileWithOutput(ctx, preprocessedPath, []string{})
+	} else {
+		// Fallback: use standard Compile method
+		err := s.compiler.Compile(ctx, preprocessedPath, []string{})
+		outputPath := s.compiler.GetOutputPath(req.Slug)
 
-		// Even if there was an error, if we have a PDF, consider it a success
-		var buildErr error
-		if !result.Parsed.HasPDF {
-			buildErr = fmt.Errorf("compilation failed")
+		compileResult = &compiler.CompileResult{
+			Success:    err == nil,
+			PDFPath:    outputPath,
+			Parsed:     &latexparser.ParseResult{HasPDF: err == nil},
+			ErrorCount: 0,
 		}
-
-		return &BuildResultDetails{
-			Slug:    req.Slug,
-			Success: result.Parsed.HasPDF,
-			Parsed:  result.Parsed,
-			Output:  result.Output,
-			Error:   buildErr,
-		}, buildErr
+		if err != nil {
+			compileResult.ErrorCount = 1
+			compileResult.Parsed.Errors = []latexparser.Issue{
+				{Level: latexparser.LevelError, Message: err.Error()},
+			}
+		}
 	}
 
-	// Fallback for other compiler types
-	err = s.compiler.Compile(ctx, preprocessedPath, []string{})
-	if err != nil {
-		return &BuildResultDetails{
-			Slug:    req.Slug,
-			Success: false,
-			Error:   err,
-			Parsed: &latexparser.ParseResult{
-				Errors: []latexparser.Issue{
-					{
-						Level:   latexparser.LevelError,
-						Message: err.Error(),
-					},
-				},
-			},
-		}, err
+	// 3. Build detailed result
+	details := &BuildResultDetails{
+		Slug:       req.Slug,
+		Success:    compileResult.Success,
+		Parsed:     compileResult.Parsed,
+		Output:     compileResult.Output,
+		OutputPath: compileResult.PDFPath,
+		Error:      nil,
 	}
 
-	return &BuildResultDetails{
-		Slug:    req.Slug,
-		Success: true,
-		Parsed: &latexparser.ParseResult{
-			HasPDF: true,
-		},
-	}, nil
+	if !compileResult.Success {
+		details.Error = fmt.Errorf("compilation failed")
+		return details, details.Error
+	}
+
+	return details, nil
 }
 
 // ExecuteAll builds all notes concurrently

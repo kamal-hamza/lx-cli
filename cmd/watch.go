@@ -11,7 +11,6 @@ import (
 
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/internal/core/services"
-	"github.com/kamal-hamza/lx-cli/pkg/latexparser"
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
 )
 
@@ -98,16 +97,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			// If we have parsed errors, show them
 			if result != nil && result.Parsed != nil && len(result.Parsed.Errors) > 0 {
 				fmt.Println(ui.FormatMuted("\nErrors found:"))
-				// Show up to 5 most relevant errors
-				maxErrors := 5
-				for i, issue := range result.Parsed.GetCriticalIssues() {
-					if i >= maxErrors {
-						remaining := len(result.Parsed.Errors) - maxErrors
-						fmt.Println(ui.FormatMuted(fmt.Sprintf("... and %d more error(s)", remaining)))
-						break
-					}
-					fmt.Println("  " + latexparser.FormatIssue(issue))
-				}
+				fmt.Println(result.Parsed.FormatIssues())
 			}
 		} else {
 			// Success case
@@ -117,13 +107,9 @@ func runWatch(cmd *cobra.Command, args []string) error {
 				summary := result.Parsed.GetSummary()
 				fmt.Printf("\r%s %s at %s\n", summary, selectedNote.Slug, timestamp)
 
-				// Show warnings if any (but limit to 3)
-				if len(result.Parsed.Warnings) > 0 && len(result.Parsed.Warnings) <= 3 {
-					for _, warning := range result.Parsed.Warnings {
-						fmt.Println("  " + latexparser.FormatIssue(warning))
-					}
-				} else if len(result.Parsed.Warnings) > 3 {
-					fmt.Println(ui.FormatMuted(fmt.Sprintf("  ⚠️  %d warning(s) - check log for details", len(result.Parsed.Warnings))))
+				// Show warnings if any
+				if len(result.Parsed.Warnings) > 0 {
+					fmt.Println(ui.FormatMuted(fmt.Sprintf("  ⚠️  %d warning(s)", len(result.Parsed.Warnings))))
 				}
 			} else {
 				fmt.Printf("\r%s Rebuilt %s at %s\n",

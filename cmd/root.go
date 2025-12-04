@@ -90,6 +90,7 @@ func init() {
 	rootCmd.AddCommand(daemonCmd)
 	rootCmd.AddCommand(assetsCmd)
 	rootCmd.AddCommand(exportAllCmd)
+	rootCmd.AddCommand(migrateCmd)
 
 	// Global flags can be added here if needed
 }
