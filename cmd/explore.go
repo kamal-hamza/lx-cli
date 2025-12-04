@@ -16,8 +16,9 @@ import (
 )
 
 var exploreCmd = &cobra.Command{
-	Use:   "explore [start-note]",
-	Short: "Interactive graph explorer",
+	Use:     "explore [start-note]",
+	Aliases: []string{"x"},
+	Short:   "Interactive graph explorer (alias: x)",
 	Long: `Maps your knowledge graph interactively.
 
 Vim Navigation:

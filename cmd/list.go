@@ -18,8 +18,9 @@ var (
 
 // listCmd represents the list command
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all LaTeX notes or templates",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List all LaTeX notes or templates (alias: ls)",
 	Long: `List all LaTeX notes in a table format, or list templates.
 
 Examples:

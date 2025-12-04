@@ -23,8 +23,9 @@ var (
 
 // buildCmd represents the build command
 var buildCmd = &cobra.Command{
-	Use:   "build [query]",
-	Short: "Build a LaTeX note to PDF or test a template",
+	Use:     "build [query]",
+	Aliases: []string{"b"},
+	Short:   "Build a LaTeX note to PDF or test a template (alias: b)",
 	Long: `Build a LaTeX note to PDF using latexmk, or test build a template.
 If no query is provided, shows an interactive list to select from.
 

@@ -59,8 +59,9 @@ var exportProfiles = map[string]ExportProfile{
 }
 
 var exportCmd = &cobra.Command{
-	Use:   "export [query]",
-	Short: "Export a note to Markdown, HTML, or Docx",
+	Use:     "export [query]",
+	Aliases: []string{"ex"},
+	Short:   "Export a note to Markdown, HTML, or Docx (alias: ex)",
 	Long: `Export a note to other formats using Pandoc.
 
 This command:

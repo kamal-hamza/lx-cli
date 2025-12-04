@@ -21,8 +21,9 @@ var (
 )
 
 var reindexCmd = &cobra.Command{
-	Use:   "reindex",
-	Short: "Rebuild the vault index and connection graph",
+	Use:     "reindex",
+	Aliases: []string{"ri"},
+	Short:   "Rebuild the vault index and connection graph (alias: ri)",
 	Long: `Rebuild the vault index by scanning all notes for metadata and connections.
 
 This command:

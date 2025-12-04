@@ -17,8 +17,9 @@ import (
 )
 
 var statsCmd = &cobra.Command{
-	Use:   "stats",
-	Short: "Show vault statistics",
+	Use:     "stats",
+	Aliases: []string{"st"},
+	Short:   "Show vault statistics (alias: st)",
 	Long: `Display summary statistics for the vault.
 
 Shows:

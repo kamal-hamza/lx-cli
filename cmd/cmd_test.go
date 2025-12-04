@@ -156,23 +156,192 @@ func TestFlagsExist(t *testing.T) {
 // TestCommandAliases verifies command aliases work
 func TestCommandAliases(t *testing.T) {
 	tests := []struct {
-		alias   string
-		command string
+		alias      string
+		command    string
+		shouldFind bool
 	}{
-		{"list", "list"},
-		// Add more aliases if they exist
+		// Phase 1 aliases
+		{"n", "new", true},
+		{"create", "new", true},
+		{"ls", "list", true},
+		{"o", "open", true},
+		{"e", "edit", true},
+		{"b", "build", true},
+		{"d", "delete", true},
+		{"rm", "delete", true},
+		{"g", "grep", true},
+		{"gg", "graph", true},
+		{"s", "sync", true},
+		{"mv", "rename", true},
+		{"t", "tag", true},
+		{"w", "watch", true},
+		{"cl", "clean", true},
+		{"dd", "daily", true},
+		{"td", "todo", true},
+		{"st", "stats", true},
+		{"ri", "reindex", true},
+		{"x", "explore", true},
+		{"a", "attach", true},
+		{"ex", "export", true},
+		{"lk", "links", true},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.alias, func(t *testing.T) {
+		t.Run(tt.alias+"->"+tt.command, func(t *testing.T) {
 			cmd, _, err := rootCmd.Find([]string{tt.alias})
-			if err != nil {
-				t.Errorf("Alias '%s' not found: %v", tt.alias, err)
-			}
-			if cmd == nil {
-				t.Errorf("Command for alias '%s' is nil", tt.alias)
+			if tt.shouldFind {
+				if err != nil {
+					t.Errorf("Alias '%s' not found: %v", tt.alias, err)
+				}
+				if cmd == nil {
+					t.Errorf("Command for alias '%s' is nil", tt.alias)
+				}
+				if cmd != nil && cmd.Name() != tt.command {
+					t.Errorf("Alias '%s' resolved to '%s', expected '%s'", tt.alias, cmd.Name(), tt.command)
+				}
 			}
 		})
+	}
+}
+
+// TestAliasesInHelpText verifies that aliases are shown in help text
+func TestAliasesInHelpText(t *testing.T) {
+	tests := []struct {
+		command string
+		aliases []string
+	}{
+		{"new", []string{"n", "create"}},
+		{"list", []string{"ls"}},
+		{"open", []string{"o"}},
+		{"edit", []string{"e"}},
+		{"build", []string{"b"}},
+		{"delete", []string{"d", "rm"}},
+		{"grep", []string{"g"}},
+		{"graph", []string{"gg"}},
+		{"sync", []string{"s"}},
+		{"rename", []string{"mv"}},
+		{"tag", []string{"t"}},
+		{"watch", []string{"w"}},
+		{"clean", []string{"cl"}},
+		{"daily", []string{"dd"}},
+		{"todo", []string{"td"}},
+		{"stats", []string{"st"}},
+		{"reindex", []string{"ri"}},
+		{"explore", []string{"x"}},
+		{"attach", []string{"a"}},
+		{"export", []string{"ex"}},
+		{"links", []string{"lk"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.command, func(t *testing.T) {
+			cmd, _, err := rootCmd.Find([]string{tt.command})
+			if err != nil {
+				t.Fatalf("Command '%s' not found: %v", tt.command, err)
+			}
+
+			if cmd == nil {
+				t.Fatalf("Command '%s' is nil", tt.command)
+			}
+
+			// Check that the command has the expected aliases
+			if len(cmd.Aliases) != len(tt.aliases) {
+				t.Errorf("Command '%s' has %d aliases, expected %d", tt.command, len(cmd.Aliases), len(tt.aliases))
+			}
+
+			// Check each alias exists
+			for _, expectedAlias := range tt.aliases {
+				found := false
+				for _, actualAlias := range cmd.Aliases {
+					if actualAlias == expectedAlias {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Command '%s' missing expected alias '%s'", tt.command, expectedAlias)
+				}
+			}
+		})
+	}
+}
+
+// TestAllAliasesResolveToCorrectCommand ensures aliases work bidirectionally
+func TestAllAliasesResolveToCorrectCommand(t *testing.T) {
+	aliasMap := map[string]string{
+		"n":      "new",
+		"create": "new",
+		"ls":     "list",
+		"o":      "open",
+		"e":      "edit",
+		"b":      "build",
+		"d":      "delete",
+		"rm":     "delete",
+		"g":      "grep",
+		"gg":     "graph",
+		"s":      "sync",
+		"mv":     "rename",
+		"t":      "tag",
+		"w":      "watch",
+		"cl":     "clean",
+		"dd":     "daily",
+		"td":     "todo",
+		"st":     "stats",
+		"ri":     "reindex",
+		"x":      "explore",
+		"a":      "attach",
+		"ex":     "export",
+		"lk":     "links",
+	}
+
+	for alias, expectedCommand := range aliasMap {
+		t.Run(alias, func(t *testing.T) {
+			// Test that alias resolves to command
+			cmdViaAlias, _, err := rootCmd.Find([]string{alias})
+			if err != nil {
+				t.Fatalf("Failed to find command via alias '%s': %v", alias, err)
+			}
+
+			// Test that full command name also works
+			cmdViaName, _, err := rootCmd.Find([]string{expectedCommand})
+			if err != nil {
+				t.Fatalf("Failed to find command via name '%s': %v", expectedCommand, err)
+			}
+
+			// They should resolve to the same command
+			if cmdViaAlias != cmdViaName {
+				t.Errorf("Alias '%s' and command '%s' don't resolve to the same command", alias, expectedCommand)
+			}
+
+			// The command name should match expected
+			if cmdViaAlias.Name() != expectedCommand {
+				t.Errorf("Alias '%s' resolved to '%s', expected '%s'", alias, cmdViaAlias.Name(), expectedCommand)
+			}
+		})
+	}
+}
+
+// TestNoAliasConflicts ensures aliases don't conflict with other command names
+func TestNoAliasConflicts(t *testing.T) {
+	allCommands := make(map[string]bool)
+	allAliases := make(map[string]string)
+
+	// Collect all command names
+	for _, cmd := range rootCmd.Commands() {
+		allCommands[cmd.Name()] = true
+
+		// Collect aliases for this command
+		for _, alias := range cmd.Aliases {
+			if existingCmd, exists := allAliases[alias]; exists {
+				t.Errorf("Alias '%s' is used by both '%s' and '%s'", alias, existingCmd, cmd.Name())
+			}
+			allAliases[alias] = cmd.Name()
+
+			// Check if alias conflicts with an actual command name
+			if allCommands[alias] {
+				t.Errorf("Alias '%s' conflicts with existing command name", alias)
+			}
+		}
 	}
 }
 

@@ -12,8 +12,9 @@ import (
 )
 
 var dailyCmd = &cobra.Command{
-	Use:   "daily",
-	Short: "Open or create today's daily note",
+	Use:     "daily",
+	Aliases: []string{"dd"},
+	Short:   "Open or create today's daily note (alias: dd)",
 	Long: `Open today's daily note.
 If it doesn't exist, it will be created automatically with the tag 'journal'.
 

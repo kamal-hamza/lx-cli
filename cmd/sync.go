@@ -13,9 +13,10 @@ import (
 )
 
 var syncCmd = &cobra.Command{
-	Use:   "sync",
-	Short: "Sync notes with remote (Stash -> Pull -> Pop -> Push)",
-	RunE:  runSync,
+	Use:     "sync",
+	Aliases: []string{"s"},
+	Short:   "Sync notes with remote (Stash -> Pull -> Pop -> Push) (alias: s)",
+	RunE:    runSync,
 }
 
 func runSync(cmd *cobra.Command, args []string) error {

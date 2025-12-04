@@ -13,9 +13,10 @@ import (
 )
 
 var tagCmd = &cobra.Command{
-	Use:   "tag [command]",
-	Short: "Manage tags on notes",
-	Long:  `Add or remove tags from notes without opening the editor.`,
+	Use:     "tag [command]",
+	Aliases: []string{"t"},
+	Short:   "Manage tags on notes (alias: t)",
+	Long:    `Add or remove tags from notes without opening the editor.`,
 }
 
 var tagAddCmd = &cobra.Command{

@@ -21,8 +21,9 @@ var (
 
 // openCmd represents the open command
 var openCmd = &cobra.Command{
-	Use:   "open [query]",
-	Short: "Open a note PDF or template in the default viewer",
+	Use:     "open [query]",
+	Aliases: []string{"o"},
+	Short:   "Open a note PDF or template in the default viewer (alias: o)",
 	Long: `Open a note PDF or template using fuzzy search.
 If no query is provided, shows an interactive list to select from.
 

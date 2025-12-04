@@ -15,8 +15,9 @@ import (
 )
 
 var attachCmd = &cobra.Command{
-	Use:   "attach [file]",
-	Short: "Import an asset with interactive metadata",
+	Use:     "attach [file]",
+	Aliases: []string{"a"},
+	Short:   "Import an asset with interactive metadata (alias: a)",
 	Long: `Import an attachment into the vault.
 
 You will be prompted to enter a Name and a Description.
