@@ -4,18 +4,31 @@ A high-performance, opinionated CLI for managing LaTeX notes. Treat your notes a
 
 ## Features
 
+### Core Functionality
+
 - **Note Management** - Create, edit, search, and organize LaTeX notes with ease
 - **Template System** - Reusable LaTeX style templates for consistent formatting
 - **Automated Building** - Compile individual notes or entire vault with latexmk
-- **Full-Text Search** - Quick grep-based search across all notes
-- **Smart Organization** - Tag-based filtering and date-based organization
 - **Knowledge Graph** - Interactive graph visualization of note connections
 - **Link Management** - Track backlinks and outgoing connections between notes
+- **Git Integration** - Built-in version control support
+- **Health Checks** - Doctor command for vault diagnostics
+
+### Power User Features ⚡
+
+- **Smart Entry** - Type `lx physics` instead of `lx open physics` - the CLI intelligently determines the action
+- **Interactive Dashboard** - Full-screen TUI for browsing, searching, and managing notes without leaving the terminal
+- **Fuzzy Search** - Lightning-fast fuzzy matching that understands abbreviations (e.g., "gth" matches "Graph Theory")
+- **Syntax Highlighting** - Beautiful LaTeX syntax highlighting in preview pane
+- **User-Defined Aliases** - Create custom shortcuts for frequently-used commands or complex workflows
+- **Scrollable Previews** - View full note content in dashboard with smooth scrolling
+
+### Search & Discovery
+
+- **Full-Text Search** - Quick grep-based search across all notes
+- **Smart Organization** - Tag-based filtering and date-based organization
 - **Statistics** - Insights into your note-taking patterns
 - **Beautiful UI** - Clean terminal interface with syntax highlighting
-- **Git Integration** - Built-in version control support
-- **Sync Support** - Push and pull notes to remote repositories
-- **Health Checks** - Doctor command for vault diagnostics
 
 ## Installation
 
@@ -73,10 +86,86 @@ go install github.com/yourusername/lx-cli@latest
     lx build "my first note"
     ```
 
-5. **Open a note:**
+5. **Open a note (Smart Entry):**
+
     ```bash
+    lx "my first note"    # Smart entry - opens the note
+    # or the traditional way:
     lx open "my first note"
     ```
+
+6. **Launch the Interactive Dashboard:**
+    ```bash
+    lx                    # No arguments launches dashboard
+    ```
+
+## Smart Entry
+
+LX features intelligent command resolution. Instead of typing explicit commands, just provide the note name:
+
+```bash
+# These all work:
+lx physics              # Opens physics note (default action)
+lx "graph theory"       # Opens graph theory note
+lx homework assignment  # Searches for "homework assignment"
+
+# Traditional commands still work:
+lx open physics
+lx edit physics
+```
+
+The default action (`open` or `edit`) can be configured in `config.yaml`:
+
+```yaml
+default_action: open # or "edit"
+```
+
+## Interactive Dashboard
+
+Press `lx` with no arguments to launch a full-screen interactive dashboard:
+
+```
+┌─ LX Notes Dashboard ─────────────────────────────────────────────┐
+│ Vault: ~/notes                           15 notes │ Modified     │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  >  Calculus III Homework      [calc] [homework]         2h ago  │
+│     Linear Algebra Notes       [math]                    1d ago  │
+│     Quantum Mechanics          [physics]                 3d ago  │
+│                                                                   │
+├──────────────────────────────────────────────────────────────────┤
+│ [↑↓/jk] Navigate  [Enter/o] Open  [e] Edit  [/] Search  [q] Quit│
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Dashboard Features
+
+- **Fuzzy Search** - Press `/` to search with intelligent fuzzy matching
+- **Live Preview** - See note content with syntax highlighting in split-screen
+- **Scrollable Preview** - Use PgUp/PgDn to scroll through note content
+- **Quick Actions** - Open, edit, build, delete notes with single keystrokes
+- **Graph View** - Toggle graph visualization with `v`
+- **Always-On Preview** - Preview pane automatically updates as you navigate
+
+### Dashboard Hotkeys
+
+| Key           | Action                          |
+| ------------- | ------------------------------- |
+| `↑`/`k`       | Move up                         |
+| `↓`/`j`       | Move down                       |
+| `g`           | Jump to top                     |
+| `G`           | Jump to bottom                  |
+| `Enter`/`o`   | Open note (PDF)                 |
+| `e`           | Edit note source                |
+| `b`           | Build note                      |
+| `d`           | Delete note (with confirmation) |
+| `n`           | Create new note                 |
+| `/`           | Search/filter (fuzzy matching)  |
+| `v`           | Toggle graph view               |
+| `PgUp`/`PgDn` | Scroll preview pane             |
+| `?`           | Show help                       |
+| `Esc`         | Exit search/cancel              |
+| `q`           | Quit dashboard                  |
 
 ## Commands
 
@@ -140,6 +229,35 @@ go install github.com/yourusername/lx-cli@latest
 - `lx doctor` - Run health checks on the vault
 - `lx todo` - List all TODO items across notes
 - `lx version` - Show version information
+- `lx dashboard` (or `lx dash`) - Launch interactive dashboard
+
+### Aliases
+
+Create custom shortcuts for frequently-used commands:
+
+- `lx alias list` - List all defined aliases
+- `lx alias add <name> <command>` - Create a new alias
+- `lx alias remove <name>` - Remove an alias
+
+**Examples:**
+
+```bash
+# Create shortcuts
+lx alias add hw "new -t homework"
+lx alias add today "list -s modified -r"
+lx alias add backup "export -f json -o ~/backup.json"
+
+# Use them
+lx hw assignment3              # Creates homework note
+lx today                       # Lists recent notes
+lx backup                      # Exports to JSON
+
+# Advanced: Variable substitution
+lx alias add note "new -t $1 -n '$2'"
+lx note math "calculus"        # Expands to: lx new -t math -n 'calculus'
+```
+
+See [Alias Documentation](docs/ALIASES.md) for complete guide.
 
 ## Configuration
 
@@ -163,11 +281,14 @@ editor: ""
 # Number of concurrent jobs for build-all
 max_workers: 4
 
-# Automatic reindexing after note modifications
-auto_reindex: true
+# Default action for smart entry (open or edit)
+default_action: open
 
-# Default sort order for list command
-default_sort: "date"
+# User-defined command aliases
+aliases:
+    hw: new -t homework
+    today: list -s modified -r
+    backup: export -f json -o ~/backup.json
 ```
 
 See `config.sample.yaml` for the complete list of configuration options including:
@@ -224,6 +345,22 @@ Graph theory is the study of graphs...
 \end{document}
 ```
 
+## Fuzzy Search
+
+LX features intelligent fuzzy search that understands:
+
+- **Abbreviations** - "gth" matches "Graph Theory"
+- **Word boundaries** - "gtb" matches "Graph Theory Basics"
+- **Non-consecutive characters** - "tpa" matches "Topology and Algebra"
+- **Case-insensitive** - Works regardless of capitalization
+- **Relevance ranking** - Best matches appear first
+
+Available in:
+
+- Dashboard search (press `/`)
+- Smart entry
+- All search commands
+
 ## Knowledge Graph
 
 The graph feature analyzes links between notes and provides:
@@ -245,6 +382,48 @@ lx graph --dot > graph.dot
 dot -Tpng graph.dot -o graph.png
 ```
 
+## Workflow Examples
+
+### Daily Workflow with Dashboard
+
+```bash
+# Launch dashboard
+lx
+
+# Press '/' to search, type "homework"
+# Press Enter to open
+# Press 'e' to edit
+# Press 'b' to build
+# Press 'q' to quit
+```
+
+### Quick Note Creation with Aliases
+
+```bash
+# Define your workflow
+lx alias add qp "new -t quick-note -e"
+lx alias add hw "new -t homework"
+lx alias add today "daily"
+
+# Use shortcuts
+lx qp idea           # Quick note + auto-edit
+lx hw assignment3    # Homework note
+lx today             # Open today's note
+```
+
+### Smart Entry Workflow
+
+```bash
+# Just type what you want
+lx physics           # Opens physics note (smart!)
+lx graph theory      # Opens graph theory note
+lx "homework 3"      # Searches and opens
+
+# Configure default action
+# Edit ~/.config/lx/config.yaml:
+# default_action: edit    # Now 'lx physics' edits instead
+```
+
 ## Environment Variables
 
 - `EDITOR` - Default text editor for `lx edit`
@@ -256,6 +435,7 @@ dot -Tpng graph.dot -o graph.png
 - `LICENSE` - MIT License file
 - `README.md` - This file
 - `config.sample.yaml` - Sample configuration file with all available options
+- `docs/ALIASES.md` - Complete alias feature documentation
 - `.latexmkrc` - LaTeX compilation settings (auto-generated in notes directory)
 - `.gitignore` - Git ignore patterns (auto-generated in vault root)
 - `~/.config/lx/config.yaml` - User configuration file
@@ -311,6 +491,8 @@ Built with:
 - [Cobra](https://github.com/spf13/cobra) - CLI framework
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) - TUI framework
 - [Lipgloss](https://github.com/charmbracelet/lipgloss) - Terminal styling
+- [Bubbles](https://github.com/charmbracelet/bubbles) - TUI components
+- [Chroma](https://github.com/alecthomas/chroma) - Syntax highlighting
 - [go-fuzzyfinder](https://github.com/ktr0731/go-fuzzyfinder) - Fuzzy finding
 
 ---
