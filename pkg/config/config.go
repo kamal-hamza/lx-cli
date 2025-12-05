@@ -17,8 +17,14 @@ type Config struct {
 	// Template for daily notes (NEW)
 	DailyTemplate string `yaml:"daily_template"`
 
+	// Default action for smart entry (open or edit)
+	DefaultAction string `yaml:"default_action"`
+
 	Editor     string `yaml:"editor"`
 	MaxWorkers int    `yaml:"max_workers"`
+
+	// User-defined command aliases
+	Aliases map[string]string `yaml:"aliases,omitempty"`
 }
 
 // DefaultConfig returns a config with default values
@@ -27,8 +33,10 @@ func DefaultConfig() *Config {
 		Compiler:        "latexmk",
 		DefaultTemplate: "",
 		DailyTemplate:   "", // Default to empty
+		DefaultAction:   "open",
 		Editor:          "",
 		MaxWorkers:      4,
+		Aliases:         make(map[string]string),
 	}
 }
 
@@ -55,6 +63,18 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.MaxWorkers <= 0 {
 		cfg.MaxWorkers = 4
+	}
+	if cfg.DefaultAction == "" {
+		cfg.DefaultAction = "open"
+	}
+	// Validate default_action value
+	if cfg.DefaultAction != "open" && cfg.DefaultAction != "edit" {
+		cfg.DefaultAction = "open"
+	}
+
+	// Initialize aliases map if nil
+	if cfg.Aliases == nil {
+		cfg.Aliases = make(map[string]string)
 	}
 
 	return cfg, nil

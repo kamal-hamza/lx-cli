@@ -6,6 +6,19 @@
 # Example: "article", "notes", "research"
 default_template: ""
 
+# Template for daily notes (created with 'lx daily' command)
+# Leave empty to use the default template
+# Example: "daily", "journal"
+daily_template: ""
+
+# Default action for smart entry (when using 'lx <query>' without a command)
+# Options: "open" (view PDF), "edit" (edit source)
+# Default: "open"
+# Examples:
+#   With "open": 'lx physics' opens the physics note PDF
+#   With "edit": 'lx physics' edits the physics note in your editor
+default_action: "open"
+
 # Default editor for editing notes
 # If not set, uses the $EDITOR environment variable
 # If $EDITOR is also not set, falls back to system defaults
@@ -61,8 +74,8 @@ pdf_viewer: ""
 # Default: ["-pdf", "-interaction=nonstopmode"]
 # Example: ["-pdf", "-shell-escape", "-synctex=1"]
 latexmk_flags:
-  - "-pdf"
-  - "-interaction=nonstopmode"
+    - "-pdf"
+    - "-interaction=nonstopmode"
 
 # Watch mode settings
 # Debounce delay in milliseconds for watch mode
