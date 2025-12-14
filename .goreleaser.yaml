@@ -4,6 +4,12 @@ builds:
     - env: [CGO_ENABLED=0]
       goos: [linux, windows, darwin]
       goarch: [amd64, arm64]
+      # FIXED: Inject version info into the correct package
+      ldflags:
+          - -s -w
+          - -X github.com/kamal-hamza/lx-cli/cmd.Version={{.Version}}
+          - -X github.com/kamal-hamza/lx-cli/cmd.GitCommit={{.Commit}}
+          - -X github.com/kamal-hamza/lx-cli/cmd.BuildDate={{.Date}}
 
 archives:
     - format: tar.gz
