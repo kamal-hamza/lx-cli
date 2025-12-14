@@ -127,7 +127,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	fmt.Println(ui.RenderKeyValue("Location", outputPath))
 
 	fmt.Println(ui.FormatInfo("Opening in browser..."))
-	return OpenFileWithDefaultApp(outputPath)
+	return OpenFile(outputPath, "")
 }
 
 func calculateSymbolSize(connections int) float32 {

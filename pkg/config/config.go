@@ -28,6 +28,9 @@ type Config struct {
 
 	// Default action when running 'lx' without arguments
 	DefaultAction string `yaml:"default_action"`
+
+	// Custom PDF viewer (e.g. "zathura", "skim")
+	PDFViewer string `yaml:"pdf_viewer"`
 }
 
 // DefaultConfig returns a config with default values
@@ -40,7 +43,8 @@ func DefaultConfig() *Config {
 		MaxWorkers:      4,
 		LatexmkFlags:    []string{"-pdf", "-interaction=nonstopmode"},
 		Aliases:         make(map[string]string),
-		DefaultAction:   "open", // Default to open
+		DefaultAction:   "open",
+		PDFViewer:       "", // Empty means use OS default
 	}
 }
 
@@ -61,7 +65,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// Apply defaults and validation
+	// Apply defaults
 	if cfg.Compiler == "" {
 		cfg.Compiler = "latexmk"
 	}
@@ -75,8 +79,7 @@ func Load(path string) (*Config, error) {
 		cfg.Aliases = make(map[string]string)
 	}
 
-	// Validate and Sanitize DefaultAction
-	// Only allow safe, read-oriented, interactive commands
+	// Validate DefaultAction
 	validActions := map[string]bool{
 		"open":    true,
 		"daily":   true,
@@ -85,12 +88,11 @@ func Load(path string) (*Config, error) {
 		"stats":   true,
 		"grep":    true,
 		"explore": true,
-		"edit":    true, // Added based on test requirements
-		"list":    true, // Added as a standard default action
+		"edit":    true,
+		"list":    true,
 	}
 
 	if !validActions[cfg.DefaultAction] {
-		// If empty, invalid, or restricted (like 'delete'), fallback to 'open'
 		cfg.DefaultAction = "open"
 	}
 
@@ -99,7 +101,6 @@ func Load(path string) (*Config, error) {
 
 // Save writes the configuration to the specified path
 func (c *Config) Save(path string) error {
-	// Ensure directory exists
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)

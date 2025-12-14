@@ -270,5 +270,5 @@ func generateGallery(results []AssetSearchResult, query string) error {
 	}
 
 	fmt.Println(ui.FormatRocket("Opening gallery..."))
-	return OpenFileWithDefaultApp(tmpPath)
+	return OpenFile(tmpPath, "")
 }

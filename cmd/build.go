@@ -24,8 +24,8 @@ var (
 // buildCmd represents the build command
 var buildCmd = &cobra.Command{
 	Use:     "build [query]",
+	Short:   "Build a LaTeX note to PDF or test a template",
 	Aliases: []string{"b"},
-	Short:   "Build a LaTeX note to PDF or test a template (alias: b)",
 	Long: `Build a LaTeX note to PDF using latexmk, or test build a template.
 If no query is provided, shows an interactive list to select from.
 
@@ -231,7 +231,7 @@ func runBuildNote(cmd *cobra.Command, args []string) error {
 	// Open PDF if requested
 	if buildOpen {
 		fmt.Println(ui.FormatInfo("Opening PDF..."))
-		if err := OpenFileWithDefaultApp(buildDetails.OutputPath); err != nil {
+		if err := OpenFile(buildDetails.OutputPath, appConfig.PDFViewer); err != nil {
 			fmt.Println(ui.FormatWarning("Failed to open PDF: " + err.Error()))
 			fmt.Println(ui.FormatInfo("You can manually open: " + buildDetails.OutputPath))
 		}

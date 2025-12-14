@@ -11,24 +11,30 @@ import (
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
 )
 
-// OpenFileWithDefaultApp opens a file using the OS default application.
-// It handles macOS (open), Windows (start), and Linux (xdg-open).
-func OpenFileWithDefaultApp(path string) error {
+// OpenFile opens a file using a custom viewer or the OS default application.
+func OpenFile(path string, viewer string) error {
 	var cmd *exec.Cmd
 
-	switch runtime.GOOS {
-	case "darwin":
-		// macOS
-		cmd = exec.Command("open", path)
-	case "windows":
-		// Windows (needs cmd /c start to detach properly)
-		cmd = exec.Command("cmd", "/c", "start", path)
-	default:
-		// Linux / Unix / FreeBSD
-		cmd = exec.Command("xdg-open", path)
+	if viewer != "" {
+		// Use user-configured viewer (e.g. zathura, skim)
+		cmd = exec.Command(viewer, path)
+	} else {
+		// Fallback to OS default
+		switch runtime.GOOS {
+		case "darwin":
+			cmd = exec.Command("open", path)
+		case "windows":
+			cmd = exec.Command("cmd", "/c", "start", path)
+		default:
+			cmd = exec.Command("xdg-open", path)
+		}
 	}
 
+	// We use Start() to detach the process so lx can exit while the viewer stays open
 	if err := cmd.Start(); err != nil {
+		if viewer != "" {
+			return fmt.Errorf("failed to open '%s' with '%s': %w", path, viewer, err)
+		}
 		return fmt.Errorf("failed to open '%s': %w", path, err)
 	}
 
@@ -36,6 +42,7 @@ func OpenFileWithDefaultApp(path string) error {
 }
 
 // OpenEditorAtLine opens the user's preferred editor at a specific line number.
+// ... [Keep existing OpenEditorAtLine implementation] ...
 func OpenEditorAtLine(path string, line int) error {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
@@ -45,35 +52,25 @@ func OpenEditorAtLine(path string, line int) error {
 	var args []string
 	lowerEditor := strings.ToLower(editor)
 
-	// Strategy 1: VS Code family (Code, Cursor, Windsurf)
-	// These REQUIRE the -g flag to parse line numbers: `code -g file:line`
 	if strings.Contains(lowerEditor, "code") ||
 		strings.Contains(lowerEditor, "cursor") ||
 		strings.Contains(lowerEditor, "windsurf") {
 		args = []string{"-g", fmt.Sprintf("%s:%d", path, line)}
-
-		// Strategy 2: Sublime Text, Zed, IntelliJ/GoLand
-		// These support direct `file:line` syntax without flags
 	} else if strings.Contains(lowerEditor, "subl") ||
-		strings.Contains(lowerEditor, "zed") || // <--- Added Zed Support
+		strings.Contains(lowerEditor, "zed") ||
 		strings.Contains(lowerEditor, "idea") ||
 		strings.Contains(lowerEditor, "goland") {
 		args = []string{fmt.Sprintf("%s:%d", path, line)}
-
-		// Strategy 3: Terminal Editors (Vim, Nano, Kakoune, Emacs)
-		// Standard Unix syntax: `vim +line file`
 	} else {
 		args = []string{fmt.Sprintf("+%d", line), path}
 	}
 
-	// Run the editor
 	cmd := exec.Command(editor, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		// Fallback: If line number fails, just open the file
 		fallback := exec.Command(editor, path)
 		fallback.Stdin = os.Stdin
 		fallback.Stdout = os.Stdout
@@ -84,13 +81,12 @@ func OpenEditorAtLine(path string, line int) error {
 	return nil
 }
 
+// ... [Keep checkAndInstallPandoc] ...
 func checkAndInstallPandoc() error {
-	// 1. Check if installed
 	if _, err := exec.LookPath("pandoc"); err == nil {
 		return nil
 	}
 
-	// 2. Offer to install
 	fmt.Println()
 	fmt.Print(ui.StyleWarning.Render("Pandoc not found. Install it now? (y/n): "))
 
@@ -100,7 +96,6 @@ func checkAndInstallPandoc() error {
 		return fmt.Errorf("missing (required for export)")
 	}
 
-	// 3. Determine Installer
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
@@ -117,13 +112,12 @@ func checkAndInstallPandoc() error {
 		} else if _, err := exec.LookPath("zypper"); err == nil {
 			cmd = exec.Command("sudo", "zypper", "install", "-y", "pandoc")
 		} else {
-			return fmt.Errorf("could not detect package manager (apt/dnf/pacman/zypper). Please install pandoc manually")
+			return fmt.Errorf("could not detect package manager. Please install pandoc manually")
 		}
 	default:
 		return fmt.Errorf("manual installation required for %s", runtime.GOOS)
 	}
 
-	// 4. Run Installer (Interactive)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
