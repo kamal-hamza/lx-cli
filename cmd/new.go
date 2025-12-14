@@ -19,7 +19,7 @@ var (
 var newCmd = &cobra.Command{
 	Use:     "new [title|template] [title]",
 	Short:   "Create a new LaTeX note or template",
-	Aliases: []string{"n", "create"}, // FIXED: Added 'create' back alongside 'n'
+	Aliases: []string{"n", "create"},
 	Long: `Create a new LaTeX note with optional template and tags, or create a new template.
 
 Examples:
@@ -62,6 +62,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 		Title:        title,
 		Tags:         newTags,
 		TemplateName: newTemplateName,
+		DateFormat:   appConfig.DateFormat, // Use configured date format
 	}
 
 	ctx := getContext()
@@ -93,7 +94,6 @@ func runNew(cmd *cobra.Command, args []string) error {
 	fmt.Println(ui.FormatInfo("Opening in editor: " + editor))
 	fmt.Println()
 
-	// Launch editor using consistent helper (line 1)
 	if err := OpenEditorAtLine(notePath, 1); err != nil {
 		fmt.Println(ui.FormatWarning("Failed to open editor: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually edit: " + notePath))
@@ -134,7 +134,6 @@ func runNewTemplate(cmd *cobra.Command, args []string) error {
 	fmt.Println(ui.FormatInfo("Opening in editor: " + editor))
 	fmt.Println()
 
-	// Launch editor using consistent helper (line 1)
 	if err := OpenEditorAtLine(templatePath, 1); err != nil {
 		fmt.Println(ui.FormatWarning("Failed to open editor: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually edit: " + templatePath))

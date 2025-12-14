@@ -90,7 +90,7 @@ func TestCreateNoteService_Execute(t *testing.T) {
 			},
 			setupMocks: func(nr *mocks.MockRepository, tr *mocks.MockTemplateRepository) {
 				// Create a note first
-				header, _ := domain.NewNoteHeader("Duplicate Note", []string{})
+				header, _ := domain.NewNoteHeader("Duplicate Note", []string{}, "duplicate-note.md")
 				note := domain.NewNoteBody(header, "% existing content")
 				nr.Save(context.Background(), note)
 			},

@@ -14,8 +14,8 @@ import (
 
 var syncCmd = &cobra.Command{
 	Use:     "sync",
+	Short:   "Sync notes with remote (Stash -> Pull -> Pop -> Push)",
 	Aliases: []string{"s"},
-	Short:   "Sync notes with remote (Stash -> Pull -> Pop -> Push) (alias: s)",
 	RunE:    runSync,
 }
 
@@ -55,8 +55,11 @@ func runSync(cmd *cobra.Command, args []string) error {
 	isDirty := len(strings.TrimSpace(string(output))) > 0
 	fmt.Println(ui.FormatSuccess("Done"))
 
-	// 3. Stash
-	if isDirty {
+	// 3. Stash (Only if dirty and auto-pull is enabled, or before any push if needed)
+	// We only need to stash if we are going to Pull
+	shouldPull := appConfig.GitAutoPull
+
+	if shouldPull && isDirty {
 		fmt.Print(ui.StyleWarning.Render("Stashing local changes... "))
 		if err := runQuiet("stash", "push", "-m", "lx-auto-stash"); err != nil {
 			fmt.Println(ui.FormatError("Failed"))
@@ -66,17 +69,21 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	// 4. Pull (Rebase)
-	fmt.Println(ui.StyleInfo.Render("Pulling remote changes..."))
-	if err := runInteractive("pull", "--rebase"); err != nil {
-		if isDirty {
-			fmt.Println(ui.FormatWarning("Pull failed. Restoring your changes..."))
-			runQuiet("stash", "pop")
+	if shouldPull {
+		fmt.Println(ui.StyleInfo.Render("Pulling remote changes..."))
+		if err := runInteractive("pull", "--rebase"); err != nil {
+			if isDirty {
+				fmt.Println(ui.FormatWarning("Pull failed. Restoring your changes..."))
+				runQuiet("stash", "pop")
+			}
+			return fmt.Errorf("pull failed: %w", err)
 		}
-		return fmt.Errorf("pull failed: %w", err)
+	} else {
+		fmt.Println(ui.FormatMuted("Skipping pull (git_auto_pull is false)"))
 	}
 
 	// 5. Pop Stash
-	if isDirty {
+	if shouldPull && isDirty {
 		fmt.Print(ui.StyleWarning.Render("Restoring local changes... "))
 		if err := runQuiet("stash", "pop"); err != nil {
 			fmt.Println(ui.FormatError("Conflict"))

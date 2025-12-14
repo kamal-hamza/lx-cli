@@ -254,7 +254,7 @@ func openEditorCmd(slug string) tea.Cmd {
 			targetPath = matches[0]
 		} else {
 			// Fallback: assume standard generation
-			targetPath = appVault.GetNotePath(domain.GenerateFilename(slug))
+			targetPath = appVault.GetNotePath(domain.GenerateFilename(slug, appConfig.DateFormat))
 		}
 
 		// 2. Prepare the Editor Command

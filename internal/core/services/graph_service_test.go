@@ -45,7 +45,7 @@ func TestGraphService_GetGraph_SingleNote(t *testing.T) {
 	svc := NewGraphService(indexer)
 
 	// Create 1 Note
-	header, _ := domain.NewNoteHeader("Solo Note", []string{"tag1"})
+	header, _ := domain.NewNoteHeader("Solo Note", []string{"tag1"}, "Solo.md")
 	note := domain.NewNoteBody(header, "Content with no links")
 	mockRepo.Save(context.Background(), note)
 
@@ -80,13 +80,13 @@ func TestGraphService_GetGraph_WithLinks(t *testing.T) {
 	svc := NewGraphService(indexer)
 
 	// Note A: References B
-	headerA, _ := domain.NewNoteHeader("Source Note", []string{"tagA"})
+	headerA, _ := domain.NewNoteHeader("Source Note", []string{"tagA"}, "Source.md")
 	// We use the slug 'target-note' which corresponds to "Target Note"
 	noteA := domain.NewNoteBody(headerA, `See \ref{target-note} for details`)
 	mockRepo.Save(context.Background(), noteA)
 
 	// Note B: Target
-	headerB, _ := domain.NewNoteHeader("Target Note", []string{"tagB"})
+	headerB, _ := domain.NewNoteHeader("Target Note", []string{"tagB"}, "Target.md")
 	noteB := domain.NewNoteBody(headerB, "Content")
 	mockRepo.Save(context.Background(), noteB)
 
@@ -125,7 +125,7 @@ func TestGraphService_GetGraph_BrokenLink(t *testing.T) {
 	svc := NewGraphService(indexer)
 
 	// Note references a non-existent note
-	header, _ := domain.NewNoteHeader("Broken Link Note", []string{})
+	header, _ := domain.NewNoteHeader("Broken Link Note", []string{}, "Broken.md")
 	note := domain.NewNoteBody(header, `See \ref{does-not-exist}`)
 	mockRepo.Save(context.Background(), note)
 

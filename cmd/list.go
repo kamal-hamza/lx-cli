@@ -19,8 +19,8 @@ var (
 // listCmd represents the list command
 var listCmd = &cobra.Command{
 	Use:     "list",
+	Short:   "List all LaTeX notes or templates",
 	Aliases: []string{"ls"},
-	Short:   "List all LaTeX notes or templates (alias: ls)",
 	Long: `List all LaTeX notes in a table format, or list templates.
 
 Examples:
@@ -38,6 +38,7 @@ Examples:
 
 func init() {
 	listCmd.Flags().StringVar(&listTagFilter, "tag", "", "Filter notes by tag")
+	// Sort defaults to "date", but we handle config override in runListNotes
 	listCmd.Flags().StringVar(&listSortBy, "sort", "date", "Sort by field (date, title)")
 	listCmd.Flags().BoolVar(&listReverse, "reverse", false, "Reverse sort order")
 	listCmd.Flags().BoolVarP(&listTemplates, "template", "t", false, "List templates instead of notes")
@@ -54,6 +55,16 @@ func runList(cmd *cobra.Command, args []string) error {
 }
 
 func runListNotes(cmd *cobra.Command, args []string) error {
+	// Determine sort order
+	// If the flag was NOT changed by the user, use the config default
+	if !cmd.Flags().Changed("sort") {
+		listSortBy = appConfig.DefaultSort
+	}
+	// If the flag was NOT changed by the user, use the config default
+	if !cmd.Flags().Changed("reverse") {
+		listReverse = appConfig.ReverseSort
+	}
+
 	// Execute list service
 	req := services.ListRequest{
 		TagFilter: listTagFilter,

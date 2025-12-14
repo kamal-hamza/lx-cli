@@ -31,6 +31,16 @@ type Config struct {
 
 	// Custom PDF viewer (e.g. "zathura", "skim")
 	PDFViewer string `yaml:"pdf_viewer"`
+
+	// List command defaults
+	DefaultSort string `yaml:"default_sort"` // "date" or "title"
+	ReverseSort bool   `yaml:"reverse_sort"`
+
+	// File naming conventions
+	DateFormat string `yaml:"date_format"` // e.g. "20060102" or "2006-01-02"
+
+	// Git settings
+	GitAutoPull bool `yaml:"git_auto_pull"`
 }
 
 // DefaultConfig returns a config with default values
@@ -44,7 +54,11 @@ func DefaultConfig() *Config {
 		LatexmkFlags:    []string{"-pdf", "-interaction=nonstopmode"},
 		Aliases:         make(map[string]string),
 		DefaultAction:   "open",
-		PDFViewer:       "", // Empty means use OS default
+		PDFViewer:       "",
+		DefaultSort:     "date",
+		ReverseSort:     false,
+		DateFormat:      "20060102", // Default YYYYMMDD
+		GitAutoPull:     true,       // Default to auto-pull for safety
 	}
 }
 
@@ -77,6 +91,12 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Aliases == nil {
 		cfg.Aliases = make(map[string]string)
+	}
+	if cfg.DateFormat == "" {
+		cfg.DateFormat = "20060102"
+	}
+	if cfg.DefaultSort == "" {
+		cfg.DefaultSort = "date"
 	}
 
 	// Validate DefaultAction

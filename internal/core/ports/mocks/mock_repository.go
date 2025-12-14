@@ -47,7 +47,6 @@ func (m *MockRepository) Save(ctx context.Context, note *domain.NoteBody) error 
 }
 
 // Get retrieves a note by slug
-// This was likely the missing method causing your errors
 func (m *MockRepository) Get(ctx context.Context, slug string) (*domain.NoteBody, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -82,6 +81,11 @@ func (m *MockRepository) Delete(ctx context.Context, slug string) error {
 	return nil
 }
 
+// List returns all note headers (for compatibility)
+func (m *MockRepository) List(ctx context.Context) ([]domain.NoteHeader, error) {
+	return m.ListHeaders(ctx)
+}
+
 // Rename renames a note from oldSlug to newTitle
 func (m *MockRepository) Rename(ctx context.Context, oldSlug string, newTitle string) error {
 	m.mu.Lock()
@@ -92,20 +96,26 @@ func (m *MockRepository) Rename(ctx context.Context, oldSlug string, newTitle st
 		return fmt.Errorf("note not found: %s", oldSlug)
 	}
 
+	// Validate new title
 	if err := domain.ValidateTitle(newTitle); err != nil {
 		return fmt.Errorf("invalid title: %w", err)
 	}
 
+	// Generate new slug
 	newSlug := domain.GenerateSlug(newTitle)
 
+	// Check if new slug already exists
 	if _, exists := m.notes[newSlug]; exists && newSlug != oldSlug {
 		return fmt.Errorf("note with slug '%s' already exists", newSlug)
 	}
 
+	// Update the note
 	note.Header.Title = newTitle
 	note.Header.Slug = newSlug
-	note.Header.Filename = domain.GenerateFilename(newSlug)
+	// FIXED: Pass default date format
+	note.Header.Filename = domain.GenerateFilename(newSlug, "20060102")
 
+	// Move to new slug
 	if newSlug != oldSlug {
 		delete(m.notes, oldSlug)
 		delete(m.headers, oldSlug)
@@ -125,52 +135,36 @@ type MockTemplateRepository struct {
 }
 
 func NewMockTemplateRepository() *MockTemplateRepository {
-	return &MockTemplateRepository{
-		templates: make(map[string]*domain.TemplateBody),
-	}
+	return &MockTemplateRepository{templates: make(map[string]*domain.TemplateBody)}
 }
-
 func (m *MockTemplateRepository) List(ctx context.Context) ([]domain.Template, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	templates := make([]domain.Template, 0, len(m.templates))
+	var list []domain.Template
 	for _, t := range m.templates {
-		templates = append(templates, domain.Template{
-			Name: t.Header.Slug,
-			Path: "/mock/path/" + t.Header.Filename,
-		})
+		list = append(list, domain.Template{Name: t.Header.Slug, Path: "/mock/" + t.Header.Filename})
 	}
-	return templates, nil
+	return list, nil
 }
-
 func (m *MockTemplateRepository) Exists(ctx context.Context, name string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	_, ok := m.templates[name]
 	return ok
 }
-
 func (m *MockTemplateRepository) Get(ctx context.Context, name string) (*domain.Template, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	template, ok := m.templates[name]
+	t, ok := m.templates[name]
 	if !ok {
-		return nil, fmt.Errorf("template not found: %s", name)
+		return nil, fmt.Errorf("not found")
 	}
-	return &domain.Template{
-		Name: template.Header.Slug,
-		Path: "/mock/path/" + template.Header.Filename,
-	}, nil
+	return &domain.Template{Name: t.Header.Slug, Path: "/mock/" + t.Header.Filename}, nil
 }
-
-func (m *MockTemplateRepository) Create(ctx context.Context, template *domain.TemplateBody) error {
+func (m *MockTemplateRepository) Create(ctx context.Context, t *domain.TemplateBody) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.templates[template.Header.Slug]; ok {
-		return fmt.Errorf("template already exists: %s", template.Header.Slug)
-	}
-	m.templates[template.Header.Slug] = template
+	m.templates[t.Header.Slug] = t
 	return nil
 }
 

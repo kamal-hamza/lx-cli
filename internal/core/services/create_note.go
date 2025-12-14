@@ -29,6 +29,7 @@ type CreateNoteRequest struct {
 	Title        string
 	Tags         []string
 	TemplateName string
+	DateFormat   string // New field for configurable date format
 }
 
 // CreateNoteResponse represents the response from creating a note
@@ -44,8 +45,8 @@ func (s *CreateNoteService) Execute(ctx context.Context, req CreateNoteRequest) 
 		return nil, fmt.Errorf("invalid title: %w", err)
 	}
 
-	// Create note header
-	header, err := domain.NewNoteHeader(req.Title, req.Tags)
+	// Create note header with configured date format
+	header, err := domain.NewNoteHeader(req.Title, req.Tags, req.DateFormat)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create note header: %w", err)
 	}
