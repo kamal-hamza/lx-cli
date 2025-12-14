@@ -17,7 +17,7 @@ import (
 var watchCmd = &cobra.Command{
 	Use:     "watch [query]",
 	Short:   "Live preview a note (auto-build on save)",
-	Aliases: []string{"w"}, // Added the missing alias
+	Aliases: []string{"w"},
 	Long: `Continuously rebuild a note whenever you save it.
 
 This uses a file watcher to trigger the Preprocess -> Compile cycle
