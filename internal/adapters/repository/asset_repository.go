@@ -85,6 +85,24 @@ func (r *FileAssetRepository) Get(ctx context.Context, filename string) (*domain
 	return &asset, nil
 }
 
+// GetByHash finds an asset by its SHA-256 hash
+func (r *FileAssetRepository) GetByHash(ctx context.Context, hash string) (*domain.Asset, error) {
+	if len(r.cache) == 0 {
+		r.Load()
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, asset := range r.cache {
+		if asset.Hash == hash {
+			return &asset, nil
+		}
+	}
+
+	return nil, os.ErrNotExist
+}
+
 func (r *FileAssetRepository) Search(ctx context.Context, query string) ([]domain.Asset, error) {
 	if len(r.cache) == 0 {
 		r.Load()

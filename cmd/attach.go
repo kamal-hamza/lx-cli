@@ -16,14 +16,12 @@ import (
 
 var attachCmd = &cobra.Command{
 	Use:     "attach [file]",
+	Short:   "Import an asset with interactive metadata",
 	Aliases: []string{"a"},
-	Short:   "Import an asset with interactive metadata (alias: a)",
 	Long: `Import an attachment into the vault.
 
-You will be prompted to enter a Name and a Description.
-The description is mandatory to ensure searchability later.
-
-Duplicates are handled automatically via content hashing.`,
+Checks for duplicates automatically. If the file already exists (even under a
+different name), it reuses the existing file.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runAttach,
 }
@@ -68,8 +66,8 @@ func runAttach(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 
-	// 3. Store File
-	filename, err := svc.Store(ctx, absPath, nameInput, descInput)
+	// 3. Store File (Handling 3 return values for duplicate detection)
+	filename, isDuplicate, err := svc.Store(ctx, absPath, nameInput, descInput)
 	if err != nil {
 		return err
 	}
@@ -77,8 +75,17 @@ func runAttach(cmd *cobra.Command, args []string) error {
 	// 4. Output
 	latexSnippet := fmt.Sprintf("\\includegraphics[width=0.8\\linewidth]{%s}", filename)
 
-	fmt.Println(ui.FormatSuccess("Asset stored: " + filename))
-	fmt.Println(ui.FormatMuted("Description saved."))
+	if isDuplicate {
+		// Duplicate Found Message
+		fmt.Println(ui.FormatWarning("Duplicate image found in vault!"))
+		fmt.Println(ui.FormatInfo("Reusing existing file: " + ui.StyleBold.Render(filename)))
+		fmt.Println(ui.FormatMuted("(No new file was created)"))
+	} else {
+		// Success Message
+		fmt.Println(ui.FormatSuccess("Asset stored: " + filename))
+		fmt.Println(ui.FormatMuted("Description saved."))
+	}
+
 	fmt.Println()
 	fmt.Println(ui.FormatInfo("LaTeX Code (Copied):"))
 	fmt.Println(ui.StyleBold.Render(latexSnippet))
