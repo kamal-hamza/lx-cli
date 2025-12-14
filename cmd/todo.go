@@ -16,8 +16,9 @@ import (
 )
 
 var todoCmd = &cobra.Command{
-	Use:   "todo",
-	Short: "Interactive task manager",
+	Use:     "todo",
+	Aliases: []string{"td"},
+	Short:   "Interactive task manager (alias: td)",
 	Long: `Aggregate and manage tasks from your notes.
 
 Scans for:

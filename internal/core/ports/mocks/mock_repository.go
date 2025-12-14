@@ -47,6 +47,7 @@ func (m *MockRepository) Save(ctx context.Context, note *domain.NoteBody) error 
 }
 
 // Get retrieves a note by slug
+// This was likely the missing method causing your errors
 func (m *MockRepository) Get(ctx context.Context, slug string) (*domain.NoteBody, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -81,11 +82,6 @@ func (m *MockRepository) Delete(ctx context.Context, slug string) error {
 	return nil
 }
 
-// List returns all note headers (for compatibility)
-func (m *MockRepository) List(ctx context.Context) ([]domain.NoteHeader, error) {
-	return m.ListHeaders(ctx)
-}
-
 // Rename renames a note from oldSlug to newTitle
 func (m *MockRepository) Rename(ctx context.Context, oldSlug string, newTitle string) error {
 	m.mu.Lock()
@@ -96,25 +92,20 @@ func (m *MockRepository) Rename(ctx context.Context, oldSlug string, newTitle st
 		return fmt.Errorf("note not found: %s", oldSlug)
 	}
 
-	// Validate new title
 	if err := domain.ValidateTitle(newTitle); err != nil {
 		return fmt.Errorf("invalid title: %w", err)
 	}
 
-	// Generate new slug
 	newSlug := domain.GenerateSlug(newTitle)
 
-	// Check if new slug already exists
 	if _, exists := m.notes[newSlug]; exists && newSlug != oldSlug {
 		return fmt.Errorf("note with slug '%s' already exists", newSlug)
 	}
 
-	// Update the note
 	note.Header.Title = newTitle
 	note.Header.Slug = newSlug
 	note.Header.Filename = domain.GenerateFilename(newSlug)
 
-	// Move to new slug
 	if newSlug != oldSlug {
 		delete(m.notes, oldSlug)
 		delete(m.headers, oldSlug)
@@ -126,20 +117,19 @@ func (m *MockRepository) Rename(ctx context.Context, oldSlug string, newTitle st
 	return nil
 }
 
-// MockTemplateRepository is a mock implementation of the TemplateRepository interface
+// --- MockTemplateRepository ---
+
 type MockTemplateRepository struct {
 	mu        sync.RWMutex
 	templates map[string]*domain.TemplateBody
 }
 
-// NewMockTemplateRepository creates a new mock template repository
 func NewMockTemplateRepository() *MockTemplateRepository {
 	return &MockTemplateRepository{
 		templates: make(map[string]*domain.TemplateBody),
 	}
 }
 
-// List returns all available templates
 func (m *MockTemplateRepository) List(ctx context.Context) ([]domain.Template, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -154,45 +144,38 @@ func (m *MockTemplateRepository) List(ctx context.Context) ([]domain.Template, e
 	return templates, nil
 }
 
-// Exists checks if a template with the given name exists
 func (m *MockTemplateRepository) Exists(ctx context.Context, name string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
 	_, ok := m.templates[name]
 	return ok
 }
 
-// Get retrieves a template by name
 func (m *MockTemplateRepository) Get(ctx context.Context, name string) (*domain.Template, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
 	template, ok := m.templates[name]
 	if !ok {
 		return nil, fmt.Errorf("template not found: %s", name)
 	}
-
 	return &domain.Template{
 		Name: template.Header.Slug,
 		Path: "/mock/path/" + template.Header.Filename,
 	}, nil
 }
 
-// Create creates a new template
 func (m *MockTemplateRepository) Create(ctx context.Context, template *domain.TemplateBody) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	if _, ok := m.templates[template.Header.Slug]; ok {
 		return fmt.Errorf("template already exists: %s", template.Header.Slug)
 	}
-
 	m.templates[template.Header.Slug] = template
 	return nil
 }
 
-// MockCompiler is a mock implementation of the Compiler interface for testing
+// --- MockCompiler ---
+
 type MockCompiler struct {
 	mu           sync.Mutex
 	calls        []string
@@ -201,36 +184,29 @@ type MockCompiler struct {
 	outputPrefix string
 }
 
-// NewMockCompiler creates a new mock compiler
 func NewMockCompiler() *MockCompiler {
 	return &MockCompiler{
 		outputPrefix: "/fake/cache/",
 	}
 }
 
-// Compile records the compile call and returns error if configured to fail
 func (m *MockCompiler) Compile(ctx context.Context, inputPath string, env []string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	m.calls = append(m.calls, inputPath)
-
 	if m.shouldFail {
 		if m.failError != nil {
 			return m.failError
 		}
 		return fmt.Errorf("compile failed for %s", inputPath)
 	}
-
 	return nil
 }
 
-// GetOutputPath returns the mock output path for a slug
 func (m *MockCompiler) GetOutputPath(slug string) string {
 	return m.outputPrefix + slug + ".pdf"
 }
 
-// SetShouldFail configures the compiler to fail on next compile
 func (m *MockCompiler) SetShouldFail(fail bool, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -238,7 +214,6 @@ func (m *MockCompiler) SetShouldFail(fail bool, err error) {
 	m.failError = err
 }
 
-// GetCalls returns all compile calls made
 func (m *MockCompiler) GetCalls() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -247,7 +222,6 @@ func (m *MockCompiler) GetCalls() []string {
 	return calls
 }
 
-// Reset clears all calls and resets state
 func (m *MockCompiler) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -256,7 +230,8 @@ func (m *MockCompiler) Reset() {
 	m.failError = nil
 }
 
-// MockPreprocessor is a mock implementation of the Preprocessor interface
+// --- MockPreprocessor ---
+
 type MockPreprocessor struct {
 	mu         sync.Mutex
 	calls      []string
@@ -265,31 +240,25 @@ type MockPreprocessor struct {
 	mockPath   string
 }
 
-// NewMockPreprocessor creates a new mock preprocessor
 func NewMockPreprocessor() *MockPreprocessor {
 	return &MockPreprocessor{
 		mockPath: "/fake/cache/mock_preprocessed.tex",
 	}
 }
 
-// Process records the call and returns the mock path or error
 func (m *MockPreprocessor) Process(slug string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	m.calls = append(m.calls, slug)
-
 	if m.shouldFail {
 		if m.failError != nil {
 			return "", m.failError
 		}
 		return "", fmt.Errorf("preprocessing failed for %s", slug)
 	}
-
 	return m.mockPath, nil
 }
 
-// SetShouldFail configures the preprocessor to fail
 func (m *MockPreprocessor) SetShouldFail(fail bool, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -297,14 +266,12 @@ func (m *MockPreprocessor) SetShouldFail(fail bool, err error) {
 	m.failError = err
 }
 
-// SetMockPath sets the path returned by Process
 func (m *MockPreprocessor) SetMockPath(path string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mockPath = path
 }
 
-// GetCalls returns all process calls made
 func (m *MockPreprocessor) GetCalls() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -313,7 +280,6 @@ func (m *MockPreprocessor) GetCalls() []string {
 	return calls
 }
 
-// Reset clears state
 func (m *MockPreprocessor) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -322,85 +288,7 @@ func (m *MockPreprocessor) Reset() {
 	m.failError = nil
 }
 
-// MockEditorLauncher is a mock implementation of the EditorLauncher interface
-type MockEditorLauncher struct {
-	mu         sync.Mutex
-	openedFile string
-	shouldFail bool
-}
-
-// NewMockEditorLauncher creates a new mock editor launcher
-func NewMockEditorLauncher() *MockEditorLauncher {
-	return &MockEditorLauncher{}
-}
-
-// Open records the file being opened and returns error if configured to fail
-func (m *MockEditorLauncher) Open(ctx context.Context, filepath string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.openedFile = filepath
-
-	if m.shouldFail {
-		return fmt.Errorf("failed to open editor")
-	}
-
-	return nil
-}
-
-// GetOpenedFile returns the last file that was opened
-func (m *MockEditorLauncher) GetOpenedFile() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.openedFile
-}
-
-// SetShouldFail configures the launcher to fail on next open
-func (m *MockEditorLauncher) SetShouldFail(fail bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.shouldFail = fail
-}
-
-// MockFileOpener is a mock implementation of the FileOpener interface
-type MockFileOpener struct {
-	mu         sync.Mutex
-	openedFile string
-	shouldFail bool
-}
-
-// NewMockFileOpener creates a new mock file opener
-func NewMockFileOpener() *MockFileOpener {
-	return &MockFileOpener{}
-}
-
-// Open records the file being opened and returns error if configured to fail
-func (m *MockFileOpener) Open(ctx context.Context, filepath string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.openedFile = filepath
-
-	if m.shouldFail {
-		return fmt.Errorf("failed to open file")
-	}
-
-	return nil
-}
-
-// GetOpenedFile returns the last file that was opened
-func (m *MockFileOpener) GetOpenedFile() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.openedFile
-}
-
-// SetShouldFail configures the opener to fail on next open
-func (m *MockFileOpener) SetShouldFail(fail bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.shouldFail = fail
-}
+// --- MockAssetRepository (For Assets) ---
 
 // MockAssetRepository is a mock implementation of the AssetRepository interface
 type MockAssetRepository struct {
@@ -434,6 +322,20 @@ func (m *MockAssetRepository) Get(ctx context.Context, filename string) (*domain
 	return &asset, nil
 }
 
+// GetByHash retrieves an asset by its content hash
+func (m *MockAssetRepository) GetByHash(ctx context.Context, hash string) (*domain.Asset, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, asset := range m.assets {
+		if asset.Hash == hash {
+			return &asset, nil
+		}
+	}
+
+	return nil, fmt.Errorf("asset not found")
+}
+
 // Search mock implementation
 func (m *MockAssetRepository) Search(ctx context.Context, query string) ([]domain.Asset, error) {
 	m.mu.Lock()
@@ -448,15 +350,10 @@ func (m *MockAssetRepository) Search(ctx context.Context, query string) ([]domai
 	return results, nil
 }
 
-// Delete removes an asset from the mock repository (NEW)
+// Delete removes an asset from the mock repository
 func (m *MockAssetRepository) Delete(ctx context.Context, filename string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.assets[filename]; !ok {
-		// Mimic real behavior: if file doesn't exist in map, typically no error, or check requirement
-		// os.Remove returns error if file not found, but repo.Delete might be idempotent
-		return nil
-	}
 	delete(m.assets, filename)
 	return nil
 }

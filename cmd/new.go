@@ -19,8 +19,9 @@ var (
 
 // newCmd represents the new command
 var newCmd = &cobra.Command{
-	Use:   "new [title|template] [title]",
-	Short: "Create a new LaTeX note or template",
+	Use:     "new [title|template] [title]",
+	Aliases: []string{"n", "create"},
+	Short:   "Create a new LaTeX note or template (aliases: n, create)",
 	Long: `Create a new LaTeX note with optional template and tags, or create a new template.
 
 Examples:

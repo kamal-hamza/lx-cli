@@ -14,8 +14,9 @@ import (
 )
 
 var graphCmd = &cobra.Command{
-	Use:   "graph",
-	Short: "Generate an interactive knowledge graph",
+	Use:     "graph",
+	Aliases: []string{"gg"},
+	Short:   "Generate an interactive knowledge graph (alias: gg)",
 	Long: `Analyze your vault and generate a visual graph.
 
 This command forces a fresh scan of your notes to ensure accuracy,

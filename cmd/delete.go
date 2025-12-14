@@ -21,8 +21,9 @@ var (
 )
 
 var deleteCmd = &cobra.Command{
-	Use:   "delete [query]",
-	Short: "Delete a note or template (and orphaned assets)",
+	Use:     "delete [query]",
+	Aliases: []string{"d", "rm"},
+	Short:   "Delete a note or template (and orphaned assets) (aliases: d, rm)",
 	Long: `Delete a note or template.
 
 If deleting a note, it checks if any attached assets (images/PDFs)

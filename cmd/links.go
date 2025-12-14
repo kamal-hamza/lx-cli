@@ -13,8 +13,9 @@ import (
 )
 
 var linksCmd = &cobra.Command{
-	Use:   "links [note]",
-	Short: "Find backlinks to a note",
+	Use:     "links [note]",
+	Aliases: []string{"lk"},
+	Short:   "Find backlinks to a note (alias: lk)",
 	Long: `Find all notes that link to or mention a specific note.
 
 This command searches for the target note's "slug" inside all other notes.

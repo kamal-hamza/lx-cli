@@ -17,8 +17,9 @@ import (
 var renameTemplate bool
 
 var renameCmd = &cobra.Command{
-	Use:   "rename [query] [new-title]",
-	Short: "Rename a note and update references",
+	Use:     "rename [query] [new-title]",
+	Aliases: []string{"mv"},
+	Short:   "Rename a note and update references (alias: mv)",
 	Long: `Rename a note and update all backlinks and imports.
 
 Refactors:

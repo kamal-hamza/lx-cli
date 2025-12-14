@@ -21,6 +21,10 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("expected default DefaultTemplate='', got %q", cfg.DefaultTemplate)
 	}
 
+	if cfg.DefaultAction != "open" {
+		t.Errorf("expected default DefaultAction='open', got %q", cfg.DefaultAction)
+	}
+
 	if cfg.Editor != "" {
 		t.Errorf("expected default Editor='', got %q", cfg.Editor)
 	}
@@ -307,6 +311,112 @@ func TestConfig_AllFields(t *testing.T) {
 				t.Errorf("%s = %v, want %v", tt.name, tt.got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestDefaultAction_DefaultValue(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.DefaultAction != "open" {
+		t.Errorf("expected default DefaultAction='open', got %q", cfg.DefaultAction)
+	}
+}
+
+func TestDefaultAction_ValidValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    string
+		expected string
+	}{
+		{"open", "open", "open"},
+		{"edit", "edit", "edit"},
+		{"empty defaults to open", "", "open"},
+		{"invalid defaults to open", "invalid", "open"},
+		{"delete is invalid", "delete", "open"},
+		{"list is invalid", "list", "open"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			configPath := filepath.Join(tempDir, "config.yaml")
+
+			yamlContent := ""
+			if tt.value != "" {
+				yamlContent = "default_action: " + tt.value + "\n"
+			}
+
+			if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+				t.Fatalf("failed to create test config file: %v", err)
+			}
+
+			cfg, err := Load(configPath)
+			if err != nil {
+				t.Fatalf("failed to load config: %v", err)
+			}
+
+			if cfg.DefaultAction != tt.expected {
+				t.Errorf("DefaultAction: expected %q, got %q", tt.expected, cfg.DefaultAction)
+			}
+		})
+	}
+}
+
+func TestDefaultAction_SaveAndLoad(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{"open", "open"},
+		{"edit", "edit"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Compiler:      "latexmk",
+				DefaultAction: tt.value,
+				MaxWorkers:    4,
+			}
+
+			err := cfg.Save(configPath)
+			if err != nil {
+				t.Fatalf("failed to save config: %v", err)
+			}
+
+			loadedCfg, err := Load(configPath)
+			if err != nil {
+				t.Fatalf("failed to load config: %v", err)
+			}
+
+			if loadedCfg.DefaultAction != tt.value {
+				t.Errorf("DefaultAction: expected %q, got %q", tt.value, loadedCfg.DefaultAction)
+			}
+		})
+	}
+}
+
+func TestLoad_PreservesDefaultAction(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	yamlContent := `compiler: latexmk
+default_action: edit
+editor: vim
+`
+	if err := os.WriteFile(configPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to create test config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	if cfg.DefaultAction != "edit" {
+		t.Errorf("expected DefaultAction='edit', got %q", cfg.DefaultAction)
 	}
 }
 

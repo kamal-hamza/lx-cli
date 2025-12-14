@@ -14,8 +14,9 @@ import (
 )
 
 var grepCmd = &cobra.Command{
-	Use:   "grep",
-	Short: "Interactive vault search",
+	Use:     "grep",
+	Aliases: []string{"g"},
+	Short:   "Interactive vault search (alias: g)",
 	Long: `Search through all notes using a fuzzy finder.
 
 This scans all lines in your vault and lets you filter them interactively.

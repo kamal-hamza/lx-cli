@@ -16,8 +16,9 @@ var (
 )
 
 var cleanCmd = &cobra.Command{
-	Use:   "clean",
-	Short: "Clean build artifacts and unused assets",
+	Use:     "clean",
+	Aliases: []string{"cl"},
+	Short:   "Clean build artifacts and unused assets (alias: cl)",
 	Long: `Remove temporary files and unused assets.
 
 Modes:

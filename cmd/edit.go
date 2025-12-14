@@ -22,8 +22,9 @@ var (
 
 // editCmd represents the edit command
 var editCmd = &cobra.Command{
-	Use:   "edit [query]",
-	Short: "Edit a note or template in your editor",
+	Use:     "edit [query]",
+	Aliases: []string{"e"},
+	Short:   "Edit a note or template in your editor (alias: e)",
 	Long: `Edit a note or template in your editor using fuzzy search.
 If no query is provided, shows an interactive list to select from.
 
