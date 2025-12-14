@@ -23,7 +23,8 @@ GOMOD=$(GOCMD) mod
 GOCLEAN=$(GOCMD) clean
 
 # Build flags
-LDFLAGS=-ldflags "-X 'lx/cmd.Version=$(VERSION)' -X 'lx/cmd.GitCommit=$(GIT_COMMIT)' -X 'lx/cmd.BuildDate=$(BUILD_DATE)'"
+# FIXED: Updated package path from 'lx/cmd' to 'github.com/kamal-hamza/lx-cli/cmd'
+LDFLAGS=-ldflags "-X 'github.com/kamal-hamza/lx-cli/cmd.Version=$(VERSION)' -X 'github.com/kamal-hamza/lx-cli/cmd.GitCommit=$(GIT_COMMIT)' -X 'github.com/kamal-hamza/lx-cli/cmd.BuildDate=$(BUILD_DATE)'"
 
 # Build the binary
 build:
