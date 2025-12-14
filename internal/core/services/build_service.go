@@ -23,9 +23,11 @@ type BuildService struct {
 // NewBuildService creates a new build service (Normal usage)
 func NewBuildService(noteRepo ports.Repository, compiler ports.Compiler, v *vault.Vault) *BuildService {
 	return &BuildService{
-		noteRepo:     noteRepo,
-		compiler:     compiler,
-		preprocessor: NewPreprocessor(noteRepo, v), // Uses real preprocessor
+		noteRepo: noteRepo,
+		compiler: compiler,
+		// Pass default cache settings here to avoid breaking changes if config isn't passed
+		// In root.go we use NewBuildServiceWithPreprocessor to pass real config
+		preprocessor: NewPreprocessor(noteRepo, v, true, 30),
 		vault:        v,
 	}
 }

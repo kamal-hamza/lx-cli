@@ -78,6 +78,7 @@ Examples:
 }
 
 func init() {
+	// Defaults will be overridden in RunE if not changed
 	exportCmd.Flags().StringVarP(&exportFormat, "format", "f", "markdown", "Output format (markdown, html, docx)")
 	exportCmd.Flags().StringVarP(&exportOutput, "output", "o", "", "Output path (file or directory)")
 }
@@ -91,7 +92,12 @@ func runExport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("internal error: preprocessor not initialized")
 	}
 
-	// 1. Validate Profile
+	// 1. Use config default if flag not set
+	if !cmd.Flags().Changed("format") {
+		exportFormat = appConfig.DefaultExportFormat
+	}
+
+	// Validate Profile
 	profile, ok := exportProfiles[exportFormat]
 	if !ok {
 		return fmt.Errorf("unsupported format: %s", exportFormat)
@@ -139,21 +145,6 @@ func runExport(cmd *cobra.Command, args []string) error {
 	if err := convertNote(note, filepath.Dir(destPath), tmpFilter.Name(), profile); err != nil {
 		return err
 	}
-
-	// If the user provided a full path (not just a dir), convertNote writes to Dir/Slug.ext.
-	// We might need to rename it if the user wanted a specific filename.
-	// However, convertNote takes an output DIR and generates filename based on slug.
-	// Let's adjust usage of convertNote below or inside runExport.
-
-	// Actually, looking at the previous convertNote implementation:
-	// It takes `outDir` and writes `slug.ext` inside it.
-	// This clashes with `export -o my-file.docx`.
-
-	// FIX: Let's refactor the logic slightly here to be direct for single export.
-	// We will manually call the conversion logic here for flexibility,
-	// or update convertNote to take a full path.
-
-	// Let's stick to the previous robust single-file export logic:
 
 	// Preprocess
 	sourcePath, err := preprocessor.Process(note.Slug)

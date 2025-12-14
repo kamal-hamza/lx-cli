@@ -173,12 +173,3 @@ export_include_assets: true
 # Useful for shared templates across multiple vaults
 # Example: "~/Documents/latex-templates"
 custom_template_dir: ""
-
-# Notification settings
-# Show desktop notifications for long-running operations
-# Default: false
-desktop_notifications: false
-
-# Sound notification on build completion
-# Default: false
-sound_notifications: false

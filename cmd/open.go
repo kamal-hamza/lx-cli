@@ -126,7 +126,7 @@ func runOpenNote(cmd *cobra.Command, args []string) error {
 				preview := fmt.Sprintf("Title: %s\nSlug: %s\nDate: %s",
 					note.Title,
 					note.Slug,
-					note.GetDisplayDate())
+					note.GetDisplayDate(appConfig.DisplayDateFormat))
 				if len(note.Tags) > 0 {
 					preview += fmt.Sprintf("\nTags: %s", note.GetTagsString())
 				}

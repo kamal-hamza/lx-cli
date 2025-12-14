@@ -149,7 +149,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 	// Debounce setup
 	var debounceTimer *time.Timer
-	const debounceDuration = 500 * time.Millisecond
+	debounceDuration := time.Duration(appConfig.WatchDebounceMS) * time.Millisecond
 
 	for {
 		select {

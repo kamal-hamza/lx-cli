@@ -140,13 +140,17 @@ func (h *NoteHeader) HasTag(tag string) bool {
 	return false
 }
 
-// GetDisplayDate returns a human-readable date
-func (h *NoteHeader) GetDisplayDate() string {
+// GetDisplayDate returns a human-readable date using the provided format
+// If format is empty, defaults to "Jan 02, 2006"
+func (h *NoteHeader) GetDisplayDate(format string) string {
 	t, err := time.Parse("2006-01-02", h.Date)
 	if err != nil {
 		return h.Date
 	}
-	return t.Format("Jan 02, 2006")
+	if format == "" {
+		format = "Jan 02, 2006"
+	}
+	return t.Format(format)
 }
 
 // GetTagsString returns tags as a comma-separated string

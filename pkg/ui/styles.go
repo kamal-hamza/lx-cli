@@ -16,63 +16,23 @@ var (
 	ColorDefault = lipgloss.AdaptiveColor{Light: "7", Dark: "7"} // White
 
 	// Base styles
-	StyleSuccess = lipgloss.NewStyle().
-			Foreground(ColorSuccess).
-			Bold(true)
-
-	StyleError = lipgloss.NewStyle().
-			Foreground(ColorError).
-			Bold(true)
-
-	StylePrimary = lipgloss.NewStyle().
-			Foreground(ColorPrimary).
-			Bold(true)
-
-	StyleInfo = lipgloss.NewStyle().
-			Foreground(ColorInfo)
-
-	StyleMuted = lipgloss.NewStyle().
-			Foreground(ColorMuted)
-
-	StyleWarning = lipgloss.NewStyle().
-			Foreground(ColorWarning).
-			Bold(true)
-
-	StyleAccent = lipgloss.NewStyle().
-			Foreground(ColorAccent)
+	StyleSuccess lipgloss.Style
+	StyleError   lipgloss.Style
+	StylePrimary lipgloss.Style
+	StyleInfo    lipgloss.Style
+	StyleMuted   lipgloss.Style
+	StyleWarning lipgloss.Style
+	StyleAccent  lipgloss.Style
 
 	// Component styles
-	StyleTitle = lipgloss.NewStyle().
-			Foreground(ColorPrimary).
-			Bold(true).
-			Underline(true)
-
-	StyleHeader = lipgloss.NewStyle().
-			Foreground(ColorPrimary).
-			Bold(true)
-
-	StyleSubtle = lipgloss.NewStyle().
-			Foreground(ColorMuted).
-			Italic(true)
-
-	StyleBold = lipgloss.NewStyle().
-			Bold(true)
-
-	// Table styles
-	StyleTableHeader = lipgloss.NewStyle().
-				Foreground(ColorPrimary).
-				Bold(true).
-				Align(lipgloss.Left)
-
-	StyleTableRow = lipgloss.NewStyle().
-			Foreground(ColorDefault)
-
-	StyleTableRowAlt = lipgloss.NewStyle().
-				Foreground(ColorDefault).
-				Faint(true)
-
-	StyleTableBorder = lipgloss.NewStyle().
-				Foreground(ColorMuted)
+	StyleTitle       lipgloss.Style
+	StyleHeader      lipgloss.Style
+	StyleSubtle      lipgloss.Style
+	StyleBold        lipgloss.Style
+	StyleTableHeader lipgloss.Style
+	StyleTableRow    lipgloss.Style
+	StyleTableRowAlt lipgloss.Style
+	StyleTableBorder lipgloss.Style
 
 	// Status icons
 	IconSuccess = "✔"
@@ -84,6 +44,42 @@ var (
 	IconBuild   = "🔨"
 	IconTag     = "🏷"
 )
+
+func init() {
+	// Initialize with default (auto) theme
+	SetTheme("auto")
+}
+
+// SetTheme applies the specified color theme ("auto", "dark", "light")
+func SetTheme(theme string) {
+	switch theme {
+	case "light":
+		lipgloss.SetHasDarkBackground(false)
+	case "dark":
+		lipgloss.SetHasDarkBackground(true)
+	default:
+		// Auto: lipgloss detects automatically
+	}
+
+	// Re-initialize styles
+	StyleSuccess = lipgloss.NewStyle().Foreground(ColorSuccess).Bold(true)
+	StyleError = lipgloss.NewStyle().Foreground(ColorError).Bold(true)
+	StylePrimary = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+	StyleInfo = lipgloss.NewStyle().Foreground(ColorInfo)
+	StyleMuted = lipgloss.NewStyle().Foreground(ColorMuted)
+	StyleWarning = lipgloss.NewStyle().Foreground(ColorWarning).Bold(true)
+	StyleAccent = lipgloss.NewStyle().Foreground(ColorAccent)
+
+	StyleTitle = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true).Underline(true)
+	StyleHeader = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+	StyleSubtle = lipgloss.NewStyle().Foreground(ColorMuted).Italic(true)
+	StyleBold = lipgloss.NewStyle().Bold(true)
+
+	StyleTableHeader = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true).Align(lipgloss.Left)
+	StyleTableRow = lipgloss.NewStyle().Foreground(ColorDefault)
+	StyleTableRowAlt = lipgloss.NewStyle().Foreground(ColorDefault).Faint(true)
+	StyleTableBorder = lipgloss.NewStyle().Foreground(ColorMuted)
+}
 
 // FormatSuccess returns a success message with icon
 func FormatSuccess(msg string) string {

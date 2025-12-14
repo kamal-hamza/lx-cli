@@ -110,7 +110,7 @@ func runListNotes(cmd *cobra.Command, args []string) error {
 	for _, note := range resp.Notes {
 		table.AddRow([]string{
 			truncate(note.Title, 40),
-			note.GetDisplayDate(),
+			note.GetDisplayDate(appConfig.DisplayDateFormat),
 			truncate(note.GetTagsString(), 30),
 			note.Slug,
 		})

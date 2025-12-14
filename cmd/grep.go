@@ -90,8 +90,8 @@ func generatePreview(path string, targetLine int) string {
 	var sb strings.Builder
 	scanner := bufio.NewScanner(file)
 
-	// Configuration
-	contextLines := 3
+	// Configuration from config
+	contextLines := appConfig.GrepContextLines
 	startLine := targetLine - contextLines
 	endLine := targetLine + contextLines
 

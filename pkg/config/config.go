@@ -34,30 +34,70 @@ type Config struct {
 	BackupRetention int  `yaml:"backup_retention"`
 
 	// Git Settings
-	GitAutoPull bool `yaml:"git_auto_pull"`
+	GitAutoPull       bool   `yaml:"git_auto_pull"`
+	GitAutoInit       bool   `yaml:"git_auto_init"`
+	GitCommitTemplate string `yaml:"git_commit_template"`
+
+	// UI Settings
+	DisplayDateFormat  string `yaml:"display_date_format"`
+	ColorTheme         string `yaml:"color_theme"`
+	SyntaxHighlighting bool   `yaml:"syntax_highlighting"`
+	TableWidth         int    `yaml:"table_width"`
+
+	// Search Settings
+	GrepCaseSensitive bool `yaml:"grep_case_sensitive"`
+	GrepContextLines  int  `yaml:"grep_context_lines"`
+	MaxSearchResults  int  `yaml:"max_search_results"`
+
+	// Performance
+	WatchDebounceMS        int  `yaml:"watch_debounce_ms"`
+	EnableCache            bool `yaml:"enable_cache"`
+	CacheExpirationMinutes int  `yaml:"cache_expiration_minutes"`
+
+	// Export
+	DefaultExportFormat string `yaml:"default_export_format"`
+	ExportIncludeAssets bool   `yaml:"export_include_assets"`
+
+	// Templates
+	CustomTemplateDir string `yaml:"custom_template_dir"`
 }
 
 // DefaultConfig returns a Config struct with default values
 func DefaultConfig() *Config {
 	return &Config{
-		Compiler:        "latexmk",
-		DefaultTemplate: "",
-		DailyTemplate:   "",
-		Editor:          "",
-		MaxWorkers:      4,
-		LatexmkFlags:    []string{},
-		DefaultAction:   "open",
-		DefaultSort:     "date",
-		ReverseSort:     false,
-		DateFormat:      "2006-01-02",
-		PDFViewer:       "xdg-open",
-		Aliases:         make(map[string]string),
-		AutoReindex:     false,
-		GraphDirection:  "LR",
-		GraphMaxNodes:   0,
-		AutoBackup:      false,
-		BackupRetention: 7,
-		GitAutoPull:     false,
+		Compiler:               "latexmk",
+		DefaultTemplate:        "",
+		DailyTemplate:          "",
+		Editor:                 "",
+		MaxWorkers:             4,
+		LatexmkFlags:           []string{"-pdf", "-interaction=nonstopmode"},
+		DefaultAction:          "open",
+		DefaultSort:            "date",
+		ReverseSort:            false,
+		DateFormat:             "20060102",
+		PDFViewer:              "",
+		Aliases:                make(map[string]string),
+		AutoReindex:            true,
+		GraphDirection:         "LR",
+		GraphMaxNodes:          100,
+		AutoBackup:             true,
+		BackupRetention:        5,
+		GitAutoPull:            true,
+		GitAutoInit:            false,
+		GitCommitTemplate:      "Auto-sync: {date} {time}",
+		DisplayDateFormat:      "2006-01-02",
+		ColorTheme:             "auto",
+		SyntaxHighlighting:     true,
+		TableWidth:             0,
+		GrepCaseSensitive:      false,
+		GrepContextLines:       2,
+		MaxSearchResults:       50,
+		WatchDebounceMS:        500,
+		EnableCache:            true,
+		CacheExpirationMinutes: 30,
+		DefaultExportFormat:    "pdf",
+		ExportIncludeAssets:    true,
+		CustomTemplateDir:      "",
 	}
 }
 
@@ -86,7 +126,7 @@ func Load(path string) (*Config, error) {
 		cfg.Aliases = make(map[string]string)
 	}
 
-	// Apply defaults for missing values
+	// Apply defaults for essential values if missing
 	if cfg.Compiler == "" {
 		cfg.Compiler = "latexmk"
 	}
@@ -100,13 +140,16 @@ func Load(path string) (*Config, error) {
 		cfg.DefaultSort = "date"
 	}
 	if cfg.DateFormat == "" {
-		cfg.DateFormat = "2006-01-02"
+		cfg.DateFormat = "20060102"
 	}
-	if cfg.PDFViewer == "" {
-		cfg.PDFViewer = "xdg-open"
+	if cfg.DisplayDateFormat == "" {
+		cfg.DisplayDateFormat = "2006-01-02"
 	}
 	if cfg.GraphDirection == "" {
 		cfg.GraphDirection = "LR"
+	}
+	if cfg.GitCommitTemplate == "" {
+		cfg.GitCommitTemplate = "Auto-sync: {date} {time}"
 	}
 
 	// Validate DefaultAction

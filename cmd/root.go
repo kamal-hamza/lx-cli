@@ -125,6 +125,9 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	}
 	appConfig = cfg
 
+	// Apply UI Theme
+	ui.SetTheme(appConfig.ColorTheme)
+
 	// Check if vault exists (skip for purge command)
 	if cmd.Name() != "purge" && !appVault.Exists() {
 		fmt.Println(ui.FormatError("Vault not initialized"))
@@ -143,13 +146,14 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 
 	// Initialize repositories
 	noteRepo = repository.NewFileRepository(appVault)
-	templateRepo = repository.NewTemplateRepository(appVault)
+	templateRepo = repository.NewTemplateRepository(appVault, appConfig.CustomTemplateDir)
 	assetRepo = repository.NewFileAssetRepository(appVault)
 
 	// Initialize compiler with config
 	latexCompiler = compiler.NewLatexmkCompiler(appVault, appConfig)
 
-	preprocessor = services.NewPreprocessor(noteRepo, appVault)
+	// Initialize Preprocessor with caching config
+	preprocessor = services.NewPreprocessor(noteRepo, appVault, appConfig.EnableCache, appConfig.CacheExpirationMinutes)
 
 	// Initialize Git service
 	gitService := services.NewGitService(appVault.RootPath)
@@ -161,7 +165,7 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	listService = services.NewListService(noteRepo)
 	indexerService = services.NewIndexerService(noteRepo, appVault.IndexPath())
 	graphService = services.NewGraphService(noteRepo, appConfig)
-	grepService = services.NewGrepService(appVault.RootPath)
+	grepService = services.NewGrepService(appVault.RootPath, appConfig.GrepCaseSensitive, appConfig.MaxSearchResults)
 
 	return nil
 }

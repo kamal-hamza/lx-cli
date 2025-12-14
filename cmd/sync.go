@@ -98,8 +98,21 @@ func runSync(cmd *cobra.Command, args []string) error {
 	if isDirty {
 		fmt.Print(ui.StyleInfo.Render("Committing... "))
 		runQuiet("add", "-A")
-		timestamp := time.Now().Format("2006-01-02 15:04")
-		if err := runQuiet("commit", "-m", "lx sync: "+timestamp); err != nil {
+
+		// Calculate message
+		msg := appConfig.GitCommitTemplate
+		now := time.Now()
+		msg = strings.ReplaceAll(msg, "{date}", now.Format("2006-01-02"))
+		msg = strings.ReplaceAll(msg, "{time}", now.Format("15:04:05"))
+
+		// Calculate rough change count
+		countCmd := exec.Command("git", "diff", "--name-only", "--cached")
+		countCmd.Dir = appVault.RootPath
+		out, _ := countCmd.Output()
+		count := len(strings.Split(strings.TrimSpace(string(out)), "\n"))
+		msg = strings.ReplaceAll(msg, "{count}", fmt.Sprintf("%d", count))
+
+		if err := runQuiet("commit", "-m", msg); err != nil {
 			return err
 		}
 		fmt.Println(ui.FormatSuccess("Done"))

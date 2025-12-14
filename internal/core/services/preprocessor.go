@@ -7,26 +7,45 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/kamal-hamza/lx-cli/internal/core/ports"
 	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 type Preprocessor struct {
-	repo  ports.Repository
-	vault *vault.Vault
+	repo                ports.Repository
+	vault               *vault.Vault
+	enableCache         bool
+	cacheExpirationMins int
 }
 
-func NewPreprocessor(repo ports.Repository, v *vault.Vault) *Preprocessor {
+func NewPreprocessor(repo ports.Repository, v *vault.Vault, enableCache bool, cacheExpirationMins int) *Preprocessor {
 	return &Preprocessor{
-		repo:  repo,
-		vault: v,
+		repo:                repo,
+		vault:               v,
+		enableCache:         enableCache,
+		cacheExpirationMins: cacheExpirationMins,
 	}
 }
 
 // Process creates a temporary compilable version of the note with resolved links
 // Returns the absolute path to the preprocessed file in the cache
 func (p *Preprocessor) Process(slug string) (string, error) {
+	tempFilename := slug + ".tex"
+	tempPath := filepath.Join(p.vault.CachePath, tempFilename)
+
+	// 0. Check Cache
+	if p.enableCache {
+		info, err := os.Stat(tempPath)
+		if err == nil {
+			age := time.Since(info.ModTime())
+			if age.Minutes() < float64(p.cacheExpirationMins) {
+				return tempPath, nil
+			}
+		}
+	}
+
 	// 1. Get Source Content
 	note, err := p.repo.Get(context.Background(), slug)
 	if err != nil {
@@ -53,8 +72,6 @@ func (p *Preprocessor) Process(slug string) (string, error) {
 
 	// 4. Write to Cache
 	// We write to the cache directory so we don't clutter the notes folder
-	tempFilename := slug + ".tex"
-	tempPath := filepath.Join(p.vault.CachePath, tempFilename)
 
 	if err := os.WriteFile(tempPath, []byte(content), 0644); err != nil {
 		return "", fmt.Errorf("failed to write preprocessed file: %w", err)
