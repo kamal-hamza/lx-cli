@@ -17,7 +17,8 @@ import (
 
 var (
 	// Global vault instance
-	appVault *vault.Vault
+	appVault  *vault.Vault
+	appConfig *config.Config
 
 	// Services
 	createNoteService     *services.CreateNoteService
@@ -113,7 +114,21 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 	}
 	appVault = v
 
-	// Check if vault exists (skip for purge command which handles its own vault check)
+	// Load Configuration
+	cfg, err := config.Load(appVault.ConfigPath)
+	if err != nil {
+		// If config is corrupt or fails to load, warn but proceed with defaults
+		// config.Load already handles missing files by returning default
+		fmt.Println(ui.FormatWarning("Failed to load config: " + err.Error()))
+		fmt.Println(ui.FormatMuted("Using default settings."))
+		cfg = config.DefaultConfig()
+	}
+	appConfig = cfg
+
+	// Apply UI Theme
+	ui.SetTheme(appConfig.ColorTheme)
+
+	// Check if vault exists (skip for purge command)
 	if cmd.Name() != "purge" && !appVault.Exists() {
 		fmt.Println(ui.FormatError("Vault not initialized"))
 		fmt.Println(ui.FormatInfo("Run 'lx init' to initialize the vault"))
@@ -131,22 +146,26 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 
 	// Initialize repositories
 	noteRepo = repository.NewFileRepository(appVault)
-	templateRepo = repository.NewTemplateRepository(appVault)
+	templateRepo = repository.NewTemplateRepository(appVault, appConfig.CustomTemplateDir)
 	assetRepo = repository.NewFileAssetRepository(appVault)
 
-	// Initialize compiler
-	latexCompiler = compiler.NewLatexmkCompiler(appVault)
+	// Initialize compiler with config
+	latexCompiler = compiler.NewLatexmkCompiler(appVault, appConfig)
 
-	preprocessor = services.NewPreprocessor(noteRepo, appVault)
+	// Initialize Preprocessor with caching config
+	preprocessor = services.NewPreprocessor(noteRepo, appVault, appConfig.EnableCache, appConfig.CacheExpirationMinutes)
+
+	// Initialize Git service
+	gitService := services.NewGitService(appVault.RootPath)
 
 	// Initialize services
-	createNoteService = services.NewCreateNoteService(noteRepo, templateRepo)
+	createNoteService = services.NewCreateNoteService(noteRepo, templateRepo, gitService, appConfig)
 	createTemplateService = services.NewCreateTemplateService(templateRepo)
 	buildService = services.NewBuildServiceWithPreprocessor(noteRepo, latexCompiler, preprocessor, appVault)
 	listService = services.NewListService(noteRepo)
 	indexerService = services.NewIndexerService(noteRepo, appVault.IndexPath())
-	graphService = services.NewGraphService(indexerService)
-	grepService = services.NewGrepService(appVault.RootPath)
+	graphService = services.NewGraphService(noteRepo, appConfig)
+	grepService = services.NewGrepService(appVault.RootPath, appConfig.GrepCaseSensitive, appConfig.MaxSearchResults)
 
 	return nil
 }

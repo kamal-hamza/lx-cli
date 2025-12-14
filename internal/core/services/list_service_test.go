@@ -362,7 +362,7 @@ func TestListService_Search(t *testing.T) {
 // Helper functions
 
 func createTestNote(repo *mocks.MockRepository, title string, tags []string) {
-	header, _ := domain.NewNoteHeader(title, tags)
+	header, _ := domain.NewNoteHeader(title, tags, title+".md")
 	note := domain.NewNoteBody(header, "% test content")
 	repo.Save(context.Background(), note)
 }

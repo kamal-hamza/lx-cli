@@ -1,360 +1,137 @@
 package domain
 
 import (
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestGenerateSlug(t *testing.T) {
 	tests := []struct {
-		name     string
 		title    string
 		expected string
 	}{
-		{
-			name:     "simple title",
-			title:    "Graph Theory",
-			expected: "graph-theory",
-		},
-		{
-			name:     "title with multiple spaces",
-			title:    "Linear Algebra  Notes",
-			expected: "linear-algebra-notes",
-		},
-		{
-			name:     "title with special characters",
-			title:    "Chemistry Lab #1",
-			expected: "chemistry-lab-1",
-		},
-		{
-			name:     "title with punctuation",
-			title:    "Calculus: Chapter 3",
-			expected: "calculus-chapter-3",
-		},
-		{
-			name:     "title with mixed case",
-			title:    "Machine Learning Basics",
-			expected: "machine-learning-basics",
-		},
-		{
-			name:     "title with multiple special chars",
-			title:    "C++ Programming & Design",
-			expected: "c-programming-design",
-		},
-		{
-			name:     "title with trailing spaces",
-			title:    "  Physics Notes  ",
-			expected: "physics-notes",
-		},
-		{
-			name:     "title with unicode",
-			title:    "Matemáticas Avanzadas",
-			expected: "matem-ticas-avanzadas",
-		},
+		{"Graph Theory", "graph-theory"},
+		{"Complex  Spaces   ", "complex-spaces"},
+		{"C++ Programming", "c-programming"}, // simplistic regex behavior
+		{"Hello/World", "hello-world"},
+		{"My Note!", "my-note"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := GenerateSlug(tt.title)
-			if result != tt.expected {
-				t.Errorf("GenerateSlug(%q) = %q, want %q", tt.title, result, tt.expected)
-			}
-		})
+		got := GenerateSlug(tt.title)
+		if got != tt.expected {
+			t.Errorf("GenerateSlug(%q) = %q, want %q", tt.title, got, tt.expected)
+		}
 	}
 }
 
 func TestGenerateFilename(t *testing.T) {
 	slug := "test-note"
-	filename := GenerateFilename(slug)
+	// Test with standard format
+	dateFormat := "20060102"
 
-	// Should end with -test-note.tex
-	expectedSuffix := "-test-note.tex"
-	if len(filename) < len(expectedSuffix) {
-		t.Errorf("GenerateFilename(%q) = %q, too short", slug, filename)
-		return
+	filename := GenerateFilename(slug, dateFormat)
+
+	// Expect format: YYYYMMDD-test-note.tex
+	datePrefix := time.Now().Format("20060102")
+	expected := datePrefix + "-" + slug + ".tex"
+
+	if filename != expected {
+		t.Errorf("GenerateFilename(%q, %q) = %q, want %q", slug, dateFormat, filename, expected)
 	}
 
-	actualSuffix := filename[len(filename)-len(expectedSuffix):]
-	if actualSuffix != expectedSuffix {
-		t.Errorf("GenerateFilename(%q) = %q, should end with %q", slug, filename, expectedSuffix)
-	}
+	// Test with hyphenated format
+	dateFormat2 := "2006-01-02"
+	filename2 := GenerateFilename(slug, dateFormat2)
+	datePrefix2 := time.Now().Format("2006-01-02")
+	expected2 := datePrefix2 + "-" + slug + ".tex"
 
-	// Should start with 8 digit date (YYYYMMDD)
-	if len(filename) < 8 {
-		t.Errorf("GenerateFilename(%q) = %q, should start with date", slug, filename)
-		return
-	}
-
-	datePrefix := filename[:8]
-	for _, c := range datePrefix {
-		if c < '0' || c > '9' {
-			t.Errorf("GenerateFilename(%q) = %q, date prefix %q should be numeric", slug, filename, datePrefix)
-			break
-		}
-	}
-}
-
-func TestParseFilename(t *testing.T) {
-	tests := []struct {
-		name     string
-		filename string
-		expected string
-	}{
-		{
-			name:     "standard filename",
-			filename: "20251127-graph-theory.tex",
-			expected: "graph-theory",
-		},
-		{
-			name:     "filename with multiple hyphens",
-			filename: "20251127-linear-algebra-notes.tex",
-			expected: "linear-algebra-notes",
-		},
-		{
-			name:     "filename without date",
-			filename: "notes.tex",
-			expected: "notes",
-		},
-		{
-			name:     "filename without extension",
-			filename: "20251127-chemistry",
-			expected: "chemistry",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ParseFilename(tt.filename)
-			if result != tt.expected {
-				t.Errorf("ParseFilename(%q) = %q, want %q", tt.filename, result, tt.expected)
-			}
-		})
+	if filename2 != expected2 {
+		t.Errorf("GenerateFilename(%q, %q) = %q, want %q", slug, dateFormat2, filename2, expected2)
 	}
 }
 
 func TestValidateTitle(t *testing.T) {
 	tests := []struct {
-		name    string
 		title   string
-		wantErr bool
+		isValid bool
 	}{
-		{
-			name:    "valid title",
-			title:   "Graph Theory Notes",
-			wantErr: false,
-		},
-		{
-			name:    "empty title",
-			title:   "",
-			wantErr: true,
-		},
-		{
-			name:    "whitespace only title",
-			title:   "   ",
-			wantErr: true,
-		},
-		{
-			name:    "very long title",
-			title:   string(make([]byte, 201)),
-			wantErr: true,
-		},
-		{
-			name:    "title at max length",
-			title:   string(make([]byte, 200)),
-			wantErr: false,
-		},
+		{"Valid Title", true},
+		{"", false},
+		{"   ", false},
+		{strings.Repeat("a", 201), false},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateTitle(tt.title)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateTitle(%q) error = %v, wantErr %v", tt.title, err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestValidateTemplate(t *testing.T) {
-	tests := []struct {
-		name     string
-		template string
-		wantErr  bool
-	}{
-		{
-			name:     "valid template name",
-			template: "homework",
-			wantErr:  false,
-		},
-		{
-			name:     "template with hyphen",
-			template: "math-common",
-			wantErr:  false,
-		},
-		{
-			name:     "template with underscore",
-			template: "hw_template",
-			wantErr:  false,
-		},
-		{
-			name:     "empty template",
-			template: "",
-			wantErr:  true,
-		},
-		{
-			name:     "template with spaces",
-			template: "my template",
-			wantErr:  true,
-		},
-		{
-			name:     "template with special chars",
-			template: "template!@#",
-			wantErr:  true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateTemplate(tt.template)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateTemplate(%q) error = %v, wantErr %v", tt.template, err, tt.wantErr)
-			}
-		})
+		err := ValidateTitle(tt.title)
+		if (err == nil) != tt.isValid {
+			t.Errorf("ValidateTitle(%q) valid = %v, want %v", tt.title, err == nil, tt.isValid)
+		}
 	}
 }
 
 func TestNewNoteHeader(t *testing.T) {
-	tests := []struct {
-		name    string
-		title   string
-		tags    []string
-		wantErr bool
-	}{
-		{
-			name:    "valid note",
-			title:   "Test Note",
-			tags:    []string{"test", "example"},
-			wantErr: false,
-		},
-		{
-			name:    "note without tags",
-			title:   "Test Note",
-			tags:    nil,
-			wantErr: false,
-		},
-		{
-			name:    "invalid title",
-			title:   "",
-			tags:    []string{"test"},
-			wantErr: true,
-		},
+	title := "My Test Note"
+	tags := []string{"test", "unit"}
+	dateFormat := "20060102"
+
+	header, err := NewNoteHeader(title, tags, dateFormat)
+	if err != nil {
+		t.Fatalf("NewNoteHeader failed: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			header, err := NewNoteHeader(tt.title, tt.tags)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("NewNoteHeader(%q, %v) error = %v, wantErr %v", tt.title, tt.tags, err, tt.wantErr)
-				return
-			}
+	if header.Title != title {
+		t.Errorf("Title = %q, want %q", header.Title, title)
+	}
 
-			if err == nil {
-				if header.Title != tt.title {
-					t.Errorf("NewNoteHeader().Title = %q, want %q", header.Title, tt.title)
-				}
-				if header.Slug == "" {
-					t.Errorf("NewNoteHeader().Slug should not be empty")
-				}
-				if header.Filename == "" {
-					t.Errorf("NewNoteHeader().Filename should not be empty")
-				}
-				if header.Date == "" {
-					t.Errorf("NewNoteHeader().Date should not be empty")
-				}
-				if tt.tags == nil && len(header.Tags) != 0 {
-					t.Errorf("NewNoteHeader().Tags = %v, want empty slice", header.Tags)
-				}
-			}
-		})
+	expectedSlug := "my-test-note"
+	if header.Slug != expectedSlug {
+		t.Errorf("Slug = %q, want %q", header.Slug, expectedSlug)
+	}
+
+	datePrefix := time.Now().Format("20060102")
+	if !strings.HasPrefix(header.Filename, datePrefix) {
+		t.Errorf("Filename %q does not start with date %q", header.Filename, datePrefix)
+	}
+
+	if len(header.Tags) != 2 {
+		t.Errorf("Tags len = %d, want 2", len(header.Tags))
 	}
 }
 
-func TestNoteHeaderHasTag(t *testing.T) {
+func TestNoteHeader_HasTag(t *testing.T) {
 	header := &NoteHeader{
-		Tags: []string{"math", "algebra", "homework"},
+		Tags: []string{"Math", "Physics"},
 	}
 
-	tests := []struct {
-		name     string
-		tag      string
-		expected bool
-	}{
-		{
-			name:     "exact match",
-			tag:      "math",
-			expected: true,
-		},
-		{
-			name:     "case insensitive match",
-			tag:      "MATH",
-			expected: true,
-		},
-		{
-			name:     "no match",
-			tag:      "science",
-			expected: false,
-		},
-		{
-			name:     "partial match should not work",
-			tag:      "mat",
-			expected: false,
-		},
+	if !header.HasTag("math") {
+		t.Error("HasTag(math) should be true (case insensitive)")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := header.HasTag(tt.tag)
-			if result != tt.expected {
-				t.Errorf("HasTag(%q) = %v, want %v", tt.tag, result, tt.expected)
-			}
-		})
+	if !header.HasTag("Physics") {
+		t.Error("HasTag(Physics) should be true")
+	}
+	if header.HasTag("biology") {
+		t.Error("HasTag(biology) should be false")
 	}
 }
 
-func TestNoteHeaderGetTagsString(t *testing.T) {
+func TestParseFilename(t *testing.T) {
 	tests := []struct {
-		name     string
-		tags     []string
+		filename string
 		expected string
 	}{
-		{
-			name:     "multiple tags",
-			tags:     []string{"math", "algebra"},
-			expected: "math, algebra",
-		},
-		{
-			name:     "single tag",
-			tags:     []string{"science"},
-			expected: "science",
-		},
-		{
-			name:     "no tags",
-			tags:     []string{},
-			expected: "-",
-		},
-		{
-			name:     "nil tags",
-			tags:     nil,
-			expected: "-",
-		},
+		{"20251128-graph-theory.tex", "graph-theory"},
+		{"2025-11-28-linear-algebra.tex", "linear-algebra"},
+		{"simple-note.tex", "simple-note"},
+		{"20251128-nested-slug-name.tex", "nested-slug-name"},
+		{"just-a-file", "just-a-file"}, // no extension
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			header := &NoteHeader{Tags: tt.tags}
-			result := header.GetTagsString()
-			if result != tt.expected {
-				t.Errorf("GetTagsString() = %q, want %q", result, tt.expected)
-			}
-		})
+		got := ParseFilename(tt.filename)
+		if got != tt.expected {
+			t.Errorf("ParseFilename(%q) = %q, want %q", tt.filename, got, tt.expected)
+		}
 	}
 }

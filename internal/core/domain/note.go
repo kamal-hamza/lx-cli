@@ -8,67 +8,70 @@ import (
 )
 
 // NoteHeader represents the lightweight metadata of a note
-// Used for listing operations to avoid loading full content
 type NoteHeader struct {
 	Title    string   `yaml:"title"`
 	Date     string   `yaml:"date"`
 	Tags     []string `yaml:"tags"`
-	Slug     string   `yaml:"-"` // e.g., "graph-theory"
-	Filename string   `yaml:"-"` // e.g., "20251128-graph-theory.tex"
+	Slug     string   `yaml:"-"`
+	Filename string   `yaml:"-"`
 }
 
 // NoteBody represents the full note with content
-// Used for build and open operations
 type NoteBody struct {
 	Header  NoteHeader
-	Content string // The full LaTeX source
+	Content string
 }
 
 // Template represents a .sty file in the templates directory
 type Template struct {
-	Name string // "homework" (from homework.sty)
-	Path string // Absolute path
+	Name string
+	Path string
 }
 
 // GenerateSlug creates a URL-friendly slug from a title
-// Converts "Graph Theory Notes" -> "graph-theory-notes"
 func GenerateSlug(title string) string {
-	// Convert to lowercase
 	slug := strings.ToLower(title)
-
-	// Replace spaces and special characters with hyphens
 	reg := regexp.MustCompile(`[^a-z0-9]+`)
 	slug = reg.ReplaceAllString(slug, "-")
-
-	// Remove leading/trailing hyphens
 	slug = strings.Trim(slug, "-")
-
-	// Collapse multiple hyphens
 	reg = regexp.MustCompile(`-+`)
 	slug = reg.ReplaceAllString(slug, "-")
-
 	return slug
 }
 
-// GenerateFilename creates a filename from date and slug
-// Format: YYYYMMDD-slug.tex
-func GenerateFilename(slug string) string {
-	date := time.Now().Format("20060102")
+// GenerateFilename creates a filename from date and slug using the provided format
+// Format example: "20060102" or "2006-01-02"
+func GenerateFilename(slug string, dateFormat string) string {
+	if dateFormat == "" {
+		// No date prefix
+		return fmt.Sprintf("%s.tex", slug)
+	}
+	date := time.Now().Format(dateFormat)
 	return fmt.Sprintf("%s-%s.tex", date, slug)
 }
 
-// ParseFilename extracts slug from filename
+// ParseFilename extracts slug from filename, handling various date formats
 // "20251128-graph-theory.tex" -> "graph-theory"
+// "2025-11-28-graph-theory.tex" -> "graph-theory"
+// "graph-theory.tex" -> "graph-theory"
 func ParseFilename(filename string) string {
 	// Remove .tex extension
 	name := strings.TrimSuffix(filename, ".tex")
 
-	// Find first hyphen (after date)
-	parts := strings.SplitN(name, "-", 2)
-	if len(parts) == 2 {
-		return parts[1]
+	// Regex to match common date prefixes followed by a hyphen
+	// Matches:
+	// - 8 digits (YYYYMMDD) e.g., 20251128-
+	// - YYYY-MM-DD e.g., 2025-11-28-
+	dateRegex := regexp.MustCompile(`^(\d{8}|\d{4}-\d{2}-\d{2})-(.+)$`)
+
+	matches := dateRegex.FindStringSubmatch(name)
+	if len(matches) == 3 {
+		// Group 2 is the slug
+		return matches[2]
 	}
 
+	// Fallback for other formats or no date: just return name
+	// If name contains hyphens but doesn't match date regex, assume it's just the slug
 	return name
 }
 
@@ -77,11 +80,9 @@ func ValidateTitle(title string) error {
 	if strings.TrimSpace(title) == "" {
 		return fmt.Errorf("title cannot be empty")
 	}
-
 	if len(title) > 200 {
 		return fmt.Errorf("title too long (max 200 characters)")
 	}
-
 	return nil
 }
 
@@ -90,24 +91,22 @@ func ValidateTemplate(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("template name cannot be empty")
 	}
-
-	// Check for valid filename characters
 	reg := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 	if !reg.MatchString(name) {
 		return fmt.Errorf("template name contains invalid characters")
 	}
-
 	return nil
 }
 
-// NewNoteHeader creates a new note header
-func NewNoteHeader(title string, tags []string) (*NoteHeader, error) {
+// NewNoteHeader creates a new note header with the specified date format
+func NewNoteHeader(title string, tags []string, dateFormat string) (*NoteHeader, error) {
 	if err := ValidateTitle(title); err != nil {
 		return nil, err
 	}
 
 	slug := GenerateSlug(title)
-	filename := GenerateFilename(slug)
+	filename := GenerateFilename(slug, dateFormat)
+	// Internal metadata date is always YYYY-MM-DD for consistency
 	date := time.Now().Format("2006-01-02")
 
 	if tags == nil {
@@ -141,13 +140,17 @@ func (h *NoteHeader) HasTag(tag string) bool {
 	return false
 }
 
-// GetDisplayDate returns a human-readable date
-func (h *NoteHeader) GetDisplayDate() string {
+// GetDisplayDate returns a human-readable date using the provided format
+// If format is empty, defaults to "Jan 02, 2006"
+func (h *NoteHeader) GetDisplayDate(format string) string {
 	t, err := time.Parse("2006-01-02", h.Date)
 	if err != nil {
 		return h.Date
 	}
-	return t.Format("Jan 02, 2006")
+	if format == "" {
+		format = "Jan 02, 2006"
+	}
+	return t.Format(format)
 }
 
 // GetTagsString returns tags as a comma-separated string

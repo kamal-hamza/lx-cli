@@ -8,8 +8,8 @@ import (
 )
 
 func TestGrepService_ScanFile_EmptyQuery(t *testing.T) {
-	// Setup
-	svc := NewGrepService("/tmp/test-vault")
+	// Setup: caseSensitive=false, maxResults=0 (unlimited)
+	svc := NewGrepService("/tmp/test-vault", false, 0)
 
 	// Create a temporary test file
 	tempDir := t.TempDir()
@@ -37,8 +37,8 @@ Line 3: Conclusion`
 }
 
 func TestGrepService_ScanFile_WithQuery(t *testing.T) {
-	// Setup
-	svc := NewGrepService("/tmp/test-vault")
+	// Setup: caseSensitive=false, maxResults=0
+	svc := NewGrepService("/tmp/test-vault", false, 0)
 
 	// Create a temporary test file
 	tempDir := t.TempDir()
@@ -72,7 +72,7 @@ Final line without the word`
 
 func TestGrepService_ScanFile_SkipsEmptyLines(t *testing.T) {
 	// Setup
-	svc := NewGrepService("/tmp/test-vault")
+	svc := NewGrepService("/tmp/test-vault", false, 0)
 
 	// Create a temporary test file with empty lines
 	tempDir := t.TempDir()
@@ -108,7 +108,7 @@ Line 5`
 
 func TestGrepService_ScanFile_SlugExtraction(t *testing.T) {
 	// Setup
-	svc := NewGrepService("/tmp/test-vault")
+	svc := NewGrepService("/tmp/test-vault", false, 0)
 
 	tests := []struct {
 		filename     string
@@ -149,7 +149,7 @@ func TestGrepService_ScanFile_SlugExtraction(t *testing.T) {
 
 func TestGrepService_ScanFile_CaseInsensitiveSearch(t *testing.T) {
 	// Setup
-	svc := NewGrepService("/tmp/test-vault")
+	svc := NewGrepService("/tmp/test-vault", false, 0)
 
 	// Create a temporary test file
 	tempDir := t.TempDir()
@@ -172,7 +172,7 @@ MiXeD CaSe ToPoLoGy`
 
 func TestGrepService_ScanFile_NonExistentFile(t *testing.T) {
 	// Setup
-	svc := NewGrepService("/tmp/test-vault")
+	svc := NewGrepService("/tmp/test-vault", false, 0)
 
 	// Execute with non-existent file
 	matches := svc.scanFile("/non/existent/file.tex", "query", false)
@@ -185,7 +185,7 @@ func TestGrepService_ScanFile_NonExistentFile(t *testing.T) {
 
 func TestGrepService_ScanFile_ExactLineContent(t *testing.T) {
 	// Setup
-	svc := NewGrepService("/tmp/test-vault")
+	svc := NewGrepService("/tmp/test-vault", false, 0)
 
 	// Create a temporary test file
 	tempDir := t.TempDir()
@@ -218,7 +218,7 @@ More content here.`
 
 func TestGrepService_ScanFile_MultipleOccurrencesInLine(t *testing.T) {
 	// Setup
-	svc := NewGrepService("/tmp/test-vault")
+	svc := NewGrepService("/tmp/test-vault", false, 0)
 
 	// Create a temporary test file
 	tempDir := t.TempDir()
@@ -263,7 +263,7 @@ func TestGrepService_Execute_Integration(t *testing.T) {
 	}
 
 	// Execute
-	svc := NewGrepService(tempDir)
+	svc := NewGrepService(tempDir, false, 0)
 	matches, err := svc.Execute(context.Background(), "topology")
 
 	// Assert
@@ -311,7 +311,7 @@ func TestGrepService_Execute_EmptyQuery(t *testing.T) {
 	}
 
 	// Execute with empty query
-	svc := NewGrepService(tempDir)
+	svc := NewGrepService(tempDir, false, 0)
 	matches, err := svc.Execute(context.Background(), "")
 
 	// Assert
@@ -330,7 +330,7 @@ func TestGrepService_Execute_NoNotesDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Execute
-	svc := NewGrepService(tempDir)
+	svc := NewGrepService(tempDir, false, 0)
 	matches, err := svc.Execute(context.Background(), "test")
 
 	// Assert - should return error
@@ -352,7 +352,7 @@ func TestGrepService_Execute_EmptyNotesDirectory(t *testing.T) {
 	}
 
 	// Execute
-	svc := NewGrepService(tempDir)
+	svc := NewGrepService(tempDir, false, 0)
 	matches, err := svc.Execute(context.Background(), "test")
 
 	// Assert
@@ -392,7 +392,7 @@ func TestGrepService_Execute_OnlyTexFiles(t *testing.T) {
 	}
 
 	// Execute
-	svc := NewGrepService(tempDir)
+	svc := NewGrepService(tempDir, false, 0)
 	matches, err := svc.Execute(context.Background(), "test")
 
 	// Assert

@@ -2,22 +2,21 @@ package services
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/internal/core/ports/mocks"
+	"github.com/kamal-hamza/lx-cli/pkg/config"
 )
 
 func TestGraphService_GetGraph_Empty(t *testing.T) {
 	// Setup
 	mockRepo := mocks.NewMockRepository()
-	tempDir := t.TempDir()
-	indexPath := filepath.Join(tempDir, "index.json")
-
-	// Create real IndexerService (it's logic-heavy but depends on Repo, which we mock)
-	indexer := NewIndexerService(mockRepo, indexPath)
-	svc := NewGraphService(indexer)
+	cfg := &config.Config{
+		GraphDirection: "LR",
+		GraphMaxNodes:  0,
+	}
+	svc := NewGraphService(mockRepo, cfg)
 
 	// Execute
 	graph, err := svc.GetGraph(context.Background(), true)
@@ -35,17 +34,17 @@ func TestGraphService_GetGraph_Empty(t *testing.T) {
 	}
 }
 
-func TestGraphService_GetGraph_SingleNote(t *testing.T) {
+func TestGraphService_GetGraph_WithNotes(t *testing.T) {
 	// Setup
 	mockRepo := mocks.NewMockRepository()
-	tempDir := t.TempDir()
-	indexPath := filepath.Join(tempDir, "index.json")
-
-	indexer := NewIndexerService(mockRepo, indexPath)
-	svc := NewGraphService(indexer)
+	cfg := &config.Config{
+		GraphDirection: "LR",
+		GraphMaxNodes:  0,
+	}
+	svc := NewGraphService(mockRepo, cfg)
 
 	// Create 1 Note
-	header, _ := domain.NewNoteHeader("Solo Note", []string{"tag1"})
+	header, _ := domain.NewNoteHeader("Solo Note", []string{"tag1"}, "Solo.md")
 	note := domain.NewNoteBody(header, "Content with no links")
 	mockRepo.Save(context.Background(), note)
 
@@ -73,20 +72,20 @@ func TestGraphService_GetGraph_SingleNote(t *testing.T) {
 func TestGraphService_GetGraph_WithLinks(t *testing.T) {
 	// Setup
 	mockRepo := mocks.NewMockRepository()
-	tempDir := t.TempDir()
-	indexPath := filepath.Join(tempDir, "index.json")
-
-	indexer := NewIndexerService(mockRepo, indexPath)
-	svc := NewGraphService(indexer)
+	cfg := &config.Config{
+		GraphDirection: "LR",
+		GraphMaxNodes:  0,
+	}
+	svc := NewGraphService(mockRepo, cfg)
 
 	// Note A: References B
-	headerA, _ := domain.NewNoteHeader("Source Note", []string{"tagA"})
+	headerA, _ := domain.NewNoteHeader("Source Note", []string{"tagA"}, "Source.md")
 	// We use the slug 'target-note' which corresponds to "Target Note"
 	noteA := domain.NewNoteBody(headerA, `See \ref{target-note} for details`)
 	mockRepo.Save(context.Background(), noteA)
 
 	// Note B: Target
-	headerB, _ := domain.NewNoteHeader("Target Note", []string{"tagB"})
+	headerB, _ := domain.NewNoteHeader("Target Note", []string{"tagB"}, "Target.md")
 	noteB := domain.NewNoteBody(headerB, "Content")
 	mockRepo.Save(context.Background(), noteB)
 
@@ -118,14 +117,14 @@ func TestGraphService_GetGraph_WithLinks(t *testing.T) {
 func TestGraphService_GetGraph_BrokenLink(t *testing.T) {
 	// Setup
 	mockRepo := mocks.NewMockRepository()
-	tempDir := t.TempDir()
-	indexPath := filepath.Join(tempDir, "index.json")
-
-	indexer := NewIndexerService(mockRepo, indexPath)
-	svc := NewGraphService(indexer)
+	cfg := &config.Config{
+		GraphDirection: "LR",
+		GraphMaxNodes:  0,
+	}
+	svc := NewGraphService(mockRepo, cfg)
 
 	// Note references a non-existent note
-	header, _ := domain.NewNoteHeader("Broken Link Note", []string{})
+	header, _ := domain.NewNoteHeader("Broken Link Note", []string{}, "Broken.md")
 	note := domain.NewNoteBody(header, `See \ref{does-not-exist}`)
 	mockRepo.Save(context.Background(), note)
 

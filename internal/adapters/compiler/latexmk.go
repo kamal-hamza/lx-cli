@@ -7,19 +7,22 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/kamal-hamza/lx-cli/pkg/config"
 	"github.com/kamal-hamza/lx-cli/pkg/latexparser"
 	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 // LatexmkCompiler implements the Compiler port using latexmk
 type LatexmkCompiler struct {
-	vault *vault.Vault
+	vault  *vault.Vault
+	config *config.Config
 }
 
 // NewLatexmkCompiler creates a new latexmk-based compiler
-func NewLatexmkCompiler(vault *vault.Vault) *LatexmkCompiler {
+func NewLatexmkCompiler(vault *vault.Vault, cfg *config.Config) *LatexmkCompiler {
 	return &LatexmkCompiler{
-		vault: vault,
+		vault:  vault,
+		config: cfg,
 	}
 }
 
@@ -104,42 +107,42 @@ func (c *LatexmkCompiler) CompileWithOutput(ctx context.Context, inputPath strin
 
 // runLatexmk executes the latexmk command with proper configuration
 func (c *LatexmkCompiler) runLatexmk(ctx context.Context, inputPath string, env []string) (string, bool) {
-	// latexmk flags:
-	// -pdf              : generate PDF using pdflatex
+	// Start with flags from configuration (or defaults)
+	// This allows users to switch engines (e.g. use -xelatex instead of -pdf)
+	args := make([]string, len(c.config.LatexmkFlags))
+	copy(args, c.config.LatexmkFlags)
+
+	// Append mandatory flags for internal tool logic
 	// -g                : force rebuild (ignore timestamps)
-	// -f                : force completion even when errors occur (important!)
-	// -interaction=...  : don't stop on errors, keep going
-	// -file-line-error  : better error messages with file:line: format
-	// -recorder         : track file dependencies
-	args := []string{
-		"-pdf",
+	// -f                : force completion even when errors occur
+	// -file-line-error  : better error messages
+	// -recorder         : track dependencies
+	mandatoryFlags := []string{
 		"-g",
-		"-f", // CRITICAL: Force continuation despite errors
-		"-interaction=nonstopmode",
+		"-f",
 		"-file-line-error",
 		"-recorder",
 		inputPath,
 	}
 
+	args = append(args, mandatoryFlags...)
+
 	cmd := exec.CommandContext(ctx, "latexmk", args...)
 
+	// ... [Rest of function remains the same] ...
 	// Set working directory to notes path
-	// The .latexmkrc file in notes/ configures output to ../cache
 	cmd.Dir = c.vault.NotesPath
 
-	// Prepare environment with TEXINPUTS for template/asset discovery
+	// Prepare environment with TEXINPUTS
 	cmdEnv := os.Environ()
 	texinputs := c.buildTexInputs()
 	cmdEnv = append(cmdEnv, "TEXINPUTS="+texinputs)
 	cmdEnv = append(cmdEnv, env...)
 	cmd.Env = cmdEnv
 
-	// Capture combined output (stdout + stderr)
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)
 
-	// Note: latexmk may return non-zero exit code even if PDF was generated
-	// That's why we verify PDF existence separately
 	cmdSuccess := (err == nil)
 
 	return outputStr, cmdSuccess

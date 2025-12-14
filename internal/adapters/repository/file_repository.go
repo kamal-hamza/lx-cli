@@ -4,19 +4,20 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/internal/core/ports"
 	"github.com/kamal-hamza/lx-cli/pkg/metadata"
 	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
-// FileRepository implements the Repository port using the file system
 type FileRepository struct {
 	vault *vault.Vault
-	mu    sync.RWMutex // Protects concurrent file operations
+	mu    sync.RWMutex
 }
 
 // NewFileRepository creates a new file-based repository
@@ -26,333 +27,237 @@ func NewFileRepository(vault *vault.Vault) *FileRepository {
 	}
 }
 
-// ListHeaders returns all note headers by parsing file metadata
+// Ensure it implements the interface
+var _ ports.Repository = (*FileRepository)(nil)
+
+// ListHeaders returns all note headers
 func (r *FileRepository) ListHeaders(ctx context.Context) ([]domain.NoteHeader, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var headers []domain.NoteHeader
-
 	entries, err := os.ReadDir(r.vault.NotesPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return headers, nil
-		}
 		return nil, fmt.Errorf("failed to read notes directory: %w", err)
 	}
 
+	var notes []domain.NoteHeader
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tex") {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".tex" {
 			continue
 		}
 
-		header, err := r.parseHeader(entry.Name())
+		info, err := entry.Info()
 		if err != nil {
-			// Log warning but continue processing other files
-			// This makes the system more robust - one bad file doesn't break everything
 			continue
 		}
 
-		headers = append(headers, *header)
+		// Read the file header
+		path := filepath.Join(r.vault.NotesPath, entry.Name())
+		header, err := r.readHeader(path, entry.Name(), info)
+		if err != nil {
+			continue
+		}
+		notes = append(notes, *header)
 	}
 
-	return headers, nil
+	return notes, nil
 }
 
-// Save persists a note to the file system
-func (r *FileRepository) Save(ctx context.Context, note *domain.NoteBody) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	path := r.vault.GetNotePath(note.Header.Filename)
-
-	// Ensure content has proper metadata
-	content := r.ensureMetadata(note)
-
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to save note: %w", err)
-	}
-
-	return nil
-}
-
-// Get retrieves a note by slug
+// Get retrieves a note by its slug
 func (r *FileRepository) Get(ctx context.Context, slug string) (*domain.NoteBody, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Find the file with this slug
-	filename, err := r.findFileBySlug(slug)
+	// 1. Find the file associated with the slug
+	filename, err := r.findFilenameBySlug(slug)
 	if err != nil {
 		return nil, err
 	}
 
-	path := r.vault.GetNotePath(filename)
-	content, err := os.ReadFile(path)
+	// 2. Read file content
+	path := filepath.Join(r.vault.NotesPath, filename)
+	contentBytes, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read note: %w", err)
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+	content := string(contentBytes)
+
+	// 3. Extract metadata using Extract (formerly Parse)
+	meta, err := metadata.Extract(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata: %w", err)
 	}
 
-	header, err := r.parseHeader(filename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse header: %w", err)
+	// 4. Construct domain objects
+	header := domain.NoteHeader{
+		Title:    meta.Title,
+		Date:     meta.Date,
+		Tags:     meta.Tags,
+		Slug:     slug,
+		Filename: filename,
 	}
 
 	return &domain.NoteBody{
-		Header:  *header,
-		Content: string(content),
+		Header:  header,
+		Content: content,
 	}, nil
 }
 
-// Exists checks if a note with the given slug exists
-func (r *FileRepository) Exists(ctx context.Context, slug string) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+// Save writes a note to disk
+func (r *FileRepository) Save(ctx context.Context, note *domain.NoteBody) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	_, err := r.findFileBySlug(slug)
-	return err == nil
+	path := filepath.Join(r.vault.NotesPath, note.Header.Filename)
+	return os.WriteFile(path, []byte(note.Content), 0644)
 }
 
-// Delete removes a note by slug
+// Delete removes a note
 func (r *FileRepository) Delete(ctx context.Context, slug string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	filename, err := r.findFileBySlug(slug)
+	filename, err := r.findFilenameBySlug(slug)
 	if err != nil {
 		return err
 	}
 
-	path := r.vault.GetNotePath(filename)
-	if err := os.Remove(path); err != nil {
-		return fmt.Errorf("failed to delete note: %w", err)
-	}
-
-	return nil
+	path := filepath.Join(r.vault.NotesPath, filename)
+	return os.Remove(path)
 }
 
-// parseHeader extracts metadata from a LaTeX file using the robust metadata parser
-func (r *FileRepository) parseHeader(filename string) (*domain.NoteHeader, error) {
-	path := r.vault.GetNotePath(filename)
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	// Use non-strict parser for reading existing files
-	// This allows recovery from minor metadata issues
-	meta, err := metadata.Extract(string(content))
-	if err != nil {
-		// Fallback: try to get basic info from filename
-		return r.fallbackHeader(filename), nil
-	}
-
-	header := &domain.NoteHeader{
-		Filename: filename,
-		Slug:     domain.ParseFilename(filename),
-		Title:    meta.Title,
-		Date:     meta.Date,
-		Tags:     meta.Tags,
-	}
-
-	// Ensure tags is never nil
-	if header.Tags == nil {
-		header.Tags = []string{}
-	}
-
-	// If no title found, use slug as fallback
-	if header.Title == "" {
-		header.Title = header.Slug
-	}
-
-	return header, nil
+// Exists checks if a slug exists
+func (r *FileRepository) Exists(ctx context.Context, slug string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, err := r.findFilenameBySlug(slug)
+	return err == nil
 }
 
-// fallbackHeader creates a minimal header when metadata parsing fails
-func (r *FileRepository) fallbackHeader(filename string) *domain.NoteHeader {
-	slug := domain.ParseFilename(filename)
-	return &domain.NoteHeader{
-		Filename: filename,
-		Slug:     slug,
-		Title:    slug,
-		Date:     "",
-		Tags:     []string{},
-	}
-}
-
-// ensureMetadata ensures the note content has proper metadata comments
-func (r *FileRepository) ensureMetadata(note *domain.NoteBody) string {
-	content := note.Content
-
-	// Try to extract existing metadata
-	existingMeta, err := metadata.Extract(content)
-	if err != nil || existingMeta == nil {
-		// No valid metadata exists, create new one
-		newMeta := &metadata.Metadata{
-			Title: note.Header.Title,
-			Date:  note.Header.Date,
-			Tags:  note.Header.Tags,
-		}
-		return metadata.Update(content, newMeta)
-	}
-
-	// Update metadata with values from header
-	// Header values take precedence over file metadata
-	updatedMeta := &metadata.Metadata{
-		Title: note.Header.Title,
-		Date:  note.Header.Date,
-		Tags:  note.Header.Tags,
-	}
-
-	// Use existing date if header doesn't specify one
-	if updatedMeta.Date == "" && existingMeta.Date != "" {
-		updatedMeta.Date = existingMeta.Date
-	}
-
-	// Merge tags if both exist
-	if len(updatedMeta.Tags) == 0 && len(existingMeta.Tags) > 0 {
-		updatedMeta.Tags = existingMeta.Tags
-	}
-
-	return metadata.Update(content, updatedMeta)
-}
-
-// findFileBySlug finds a file matching the given slug
-// This is a helper that must be called with locks already held
-func (r *FileRepository) findFileBySlug(slug string) (string, error) {
-	entries, err := os.ReadDir(r.vault.NotesPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read notes directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tex") {
-			continue
-		}
-
-		fileSlug := domain.ParseFilename(entry.Name())
-		if fileSlug == slug {
-			return entry.Name(), nil
-		}
-	}
-
-	return "", fmt.Errorf("note not found: %s", slug)
-}
-
-// FindByQuery searches for notes matching a fuzzy query
-func (r *FileRepository) FindByQuery(ctx context.Context, query string) ([]domain.NoteHeader, error) {
-	headers, err := r.ListHeaders(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if query == "" {
-		return headers, nil
-	}
-
-	query = strings.ToLower(query)
-	var matches []domain.NoteHeader
-
-	for _, header := range headers {
-		// Check title match
-		if strings.Contains(strings.ToLower(header.Title), query) {
-			matches = append(matches, header)
-			continue
-		}
-
-		// Check slug match
-		if strings.Contains(strings.ToLower(header.Slug), query) {
-			matches = append(matches, header)
-			continue
-		}
-
-		// Check tag match
-		for _, tag := range header.Tags {
-			if strings.Contains(strings.ToLower(tag), query) {
-				matches = append(matches, header)
-				break
-			}
-		}
-	}
-
-	return matches, nil
-}
-
-// Rename renames a note from oldSlug to newTitle
+// Rename updates a note's title and filename
 func (r *FileRepository) Rename(ctx context.Context, oldSlug string, newTitle string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Validate new title
-	if err := domain.ValidateTitle(newTitle); err != nil {
-		return fmt.Errorf("invalid title: %w", err)
-	}
-
-	// Find the old file
-	oldFilename, err := r.findFileBySlug(oldSlug)
+	// 1. Find existing file
+	oldFilename, err := r.findFilenameBySlug(oldSlug)
 	if err != nil {
-		return fmt.Errorf("note not found: %w", err)
+		return err
 	}
 
-	// Generate new slug and filename
-	newSlug := domain.GenerateSlug(newTitle)
-
-	// Check if new slug already exists
-	_, existsErr := r.findFileBySlug(newSlug)
-	if existsErr == nil && newSlug != oldSlug {
-		return fmt.Errorf("note with slug '%s' already exists", newSlug)
-	}
-
-	// Preserve date prefix if present
-	newFilename := domain.GenerateFilename(newSlug)
-	if strings.Contains(oldFilename, "-") {
-		parts := strings.SplitN(oldFilename, "-", 2)
-		if len(parts) == 2 && len(parts[0]) == 8 { // YYYYMMDD check
-			newFilename = parts[0] + "-" + newSlug + ".tex"
-		}
-	}
-
-	oldPath := r.vault.GetNotePath(oldFilename)
-	newPath := r.vault.GetNotePath(newFilename)
-
-	// Read current content
+	// 2. Read existing content
+	oldPath := filepath.Join(r.vault.NotesPath, oldFilename)
 	contentBytes, err := os.ReadFile(oldPath)
 	if err != nil {
-		return fmt.Errorf("failed to read note: %w", err)
+		return fmt.Errorf("failed to read original file: %w", err)
 	}
-
 	content := string(contentBytes)
 
-	// Extract current metadata and update title
-	existingMeta, err := metadata.Extract(content)
-	if err != nil {
-		// If metadata extraction fails, fall back to regex replacement
-		titleRegex := regexp.MustCompile(`(?m)^%+\s*title:.*$`)
-		content = titleRegex.ReplaceAllString(content, fmt.Sprintf("%%%% title: %s", newTitle))
-	} else {
-		// Update metadata properly
-		existingMeta.Title = newTitle
-		content = metadata.Update(content, existingMeta)
-	}
-
-	// Write updated content to new path
-	if err := os.WriteFile(newPath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to write renamed note: %w", err)
-	}
-
-	// Remove old file only if the path changed
-	if oldPath != newPath {
-		if err := os.Remove(oldPath); err != nil {
-			// Try to clean up the new file
-			os.Remove(newPath)
-			return fmt.Errorf("failed to remove old file: %w", err)
+	// 3. Generate new slug
+	newSlug := domain.GenerateSlug(newTitle)
+	if newSlug == oldSlug {
+		// Just update title in metadata, keep filename
+		newContent, err := metadata.UpdateTitle(content, newTitle)
+		if err != nil {
+			return err
 		}
+		return os.WriteFile(oldPath, []byte(newContent), 0644)
+	}
+
+	// 4. Generate new filename (PRESERVING DATE)
+	newFilename := preserveDatePrefix(oldFilename, newSlug)
+
+	// Ensure new filename doesn't already exist
+	newPath := filepath.Join(r.vault.NotesPath, newFilename)
+	if _, err := os.Stat(newPath); err == nil && newFilename != oldFilename {
+		return fmt.Errorf("destination filename already exists: %s", newFilename)
+	}
+
+	// 5. Update content metadata
+	newContent, err := metadata.UpdateTitle(content, newTitle)
+	if err != nil {
+		return fmt.Errorf("failed to update metadata: %w", err)
+	}
+
+	// 6. Write new file
+	if err := os.WriteFile(newPath, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("failed to write new file: %w", err)
+	}
+
+	// 7. Remove old file
+	if err := os.Remove(oldPath); err != nil {
+		return fmt.Errorf("failed to remove old file: %w", err)
 	}
 
 	return nil
 }
 
-// List returns all notes (full bodies)
-func (r *FileRepository) List(ctx context.Context) ([]domain.NoteHeader, error) {
-	return r.ListHeaders(ctx)
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
+func (r *FileRepository) findFilenameBySlug(targetSlug string) (string, error) {
+	entries, err := os.ReadDir(r.vault.NotesPath)
+	if err != nil {
+		return "", err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".tex" {
+			slug := domain.ParseFilename(entry.Name())
+			if slug == targetSlug {
+				return entry.Name(), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("note not found: %s", targetSlug)
+}
+
+func (r *FileRepository) readHeader(path string, filename string, info os.FileInfo) (*domain.NoteHeader, error) {
+	// Read first 1KB for metadata to be fast
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	buf := make([]byte, 1024)
+	n, err := f.Read(buf)
+	if err != nil && n == 0 {
+		return nil, err
+	}
+	content := string(buf[:n])
+
+	// Use Extract instead of Parse
+	meta, err := metadata.Extract(content)
+	if err != nil {
+		// Fallback for files without valid metadata
+		return &domain.NoteHeader{
+			Title:    domain.ParseFilename(filename),
+			Date:     info.ModTime().Format("2006-01-02"),
+			Slug:     domain.ParseFilename(filename),
+			Filename: filename,
+		}, nil
+	}
+
+	return &domain.NoteHeader{
+		Title:    meta.Title,
+		Date:     meta.Date,
+		Tags:     meta.Tags,
+		Slug:     domain.ParseFilename(filename),
+		Filename: filename,
+	}, nil
+}
+
+func preserveDatePrefix(oldFilename, newSlug string) string {
+	oldName := strings.TrimSuffix(oldFilename, ".tex")
+	re := regexp.MustCompile(`^(\d{8}|\d{4}-\d{2}-\d{2})-(.+)$`)
+	matches := re.FindStringSubmatch(oldName)
+
+	if len(matches) == 3 {
+		datePart := matches[1]
+		return fmt.Sprintf("%s-%s.tex", datePart, newSlug)
+	}
+	return fmt.Sprintf("%s.tex", newSlug)
 }

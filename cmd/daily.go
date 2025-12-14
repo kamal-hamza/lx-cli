@@ -5,81 +5,75 @@ import (
 	"time"
 
 	"github.com/kamal-hamza/lx-cli/internal/core/services"
-	"github.com/kamal-hamza/lx-cli/pkg/config"
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
-
 	"github.com/spf13/cobra"
 )
 
 var dailyCmd = &cobra.Command{
 	Use:     "daily",
 	Aliases: []string{"dd"},
-	Short:   "Open or create today's daily note (alias: dd)",
-	Long: `Open today's daily note.
-If it doesn't exist, it will be created automatically with the tag 'journal'.
+	Short:   "Create or open today's daily note",
+	Long: `Create or open today's daily note.
 
-This is perfect for:
-- Morning pages
-- Daily tasks
-- Quick scratchpad for thoughts`,
+If a daily note for today already exists, it will be opened.
+Otherwise, a new daily note will be created using the configured daily template.
+
+Examples:
+  lx daily
+  lx dd`,
 	RunE: runDaily,
 }
 
 func runDaily(cmd *cobra.Command, args []string) error {
-	ctx := getContext()
-
-	// 1. Load Configuration
-	// We check if a specific template is configured for daily notes
-	cfg, err := config.Load(appVault.ConfigPath)
-	if err != nil {
-		// Fallback to defaults silently if config fails to load
-		cfg = config.DefaultConfig()
-	}
-
-	// 2. Generate Title: "Journal 2025-11-28"
+	// Generate daily note title from current date
 	now := time.Now()
-	title := fmt.Sprintf("Journal %s", now.Format("2006-01-02"))
+	title := now.Format("2006-01-02") // e.g., "2023-12-14"
+	tags := []string{"daily"}
 
-	// 3. Prepare Creation Request
-	// We use the configured DailyTemplate if available
+	// Use configured daily template, or fall back to empty string
+	templateName := appConfig.DailyTemplate
+
+	// Create request
 	req := services.CreateNoteRequest{
 		Title:        title,
-		Tags:         []string{"journal"},
-		TemplateName: cfg.DailyTemplate,
+		Tags:         tags,
+		TemplateName: templateName,
+		DateFormat:   appConfig.DateFormat,
 	}
 
-	fmt.Println(ui.FormatRocket("Opening daily note..."))
-
-	// 4. Try to Create Note
-	// If it already exists, the service returns an error which we handle
+	ctx := getContext()
 	resp, err := createNoteService.Execute(ctx, req)
-
-	var notePath string
-
 	if err != nil {
-		// If creation failed, check if it's because the note already exists
-		searchReq := services.SearchRequest{Query: title}
-		searchResp, searchErr := listService.Search(ctx, searchReq)
-		if searchErr != nil {
-			return searchErr
+		// If note already exists, just open it
+		if err.Error() == fmt.Sprintf("note with slug '%s' already exists", title) {
+			fmt.Println(ui.FormatInfo("Daily note already exists, opening..."))
+			return runOpenNote(cmd, []string{title})
 		}
-
-		if searchResp.Total > 0 {
-			// Found existing daily note
-			target := searchResp.Notes[0]
-			notePath = appVault.GetNotePath(target.Filename)
-			fmt.Println(ui.FormatInfo("Found existing entry: " + target.Title))
-		} else {
-			// It was a real error (not just duplication)
-			return err
-		}
-	} else {
-		// Created successfully
-		notePath = appVault.GetNotePath(resp.FilePath)
-		fmt.Println(ui.FormatSuccess("Created new entry for today."))
+		fmt.Println(ui.FormatError("Failed to create daily note"))
+		return err
 	}
 
-	// 5. Open in Editor
-	// Uses the shared helper from cmd/utils.go which handles line numbers
-	return OpenEditorAtLine(notePath, 0)
+	// Success message
+	fmt.Println(ui.FormatSuccess("Daily note created successfully!"))
+	fmt.Println()
+	fmt.Println(ui.RenderKeyValue("Title", resp.Note.Header.Title))
+	fmt.Println(ui.RenderKeyValue("File", resp.FilePath))
+	fmt.Println()
+
+	// Get the full path
+	notePath := appVault.GetNotePath(resp.FilePath)
+
+	// Open in editor
+	editor := GetPreferredEditor()
+	fmt.Println(ui.FormatInfo("Opening in editor: " + editor))
+	fmt.Println()
+
+	if err := OpenEditorAtLine(notePath, 1); err != nil {
+		fmt.Println(ui.FormatWarning("Failed to open editor: " + err.Error()))
+		fmt.Println(ui.FormatInfo("You can manually edit: " + notePath))
+	}
+
+	return nil
 }
+
+// init function removed - dailyCmd is registered in root.go

@@ -7,26 +7,45 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/kamal-hamza/lx-cli/internal/core/ports"
 	"github.com/kamal-hamza/lx-cli/pkg/vault"
 )
 
 type Preprocessor struct {
-	repo  ports.Repository
-	vault *vault.Vault
+	repo                ports.Repository
+	vault               *vault.Vault
+	enableCache         bool
+	cacheExpirationMins int
 }
 
-func NewPreprocessor(repo ports.Repository, v *vault.Vault) *Preprocessor {
+func NewPreprocessor(repo ports.Repository, v *vault.Vault, enableCache bool, cacheExpirationMins int) *Preprocessor {
 	return &Preprocessor{
-		repo:  repo,
-		vault: v,
+		repo:                repo,
+		vault:               v,
+		enableCache:         enableCache,
+		cacheExpirationMins: cacheExpirationMins,
 	}
 }
 
 // Process creates a temporary compilable version of the note with resolved links
 // Returns the absolute path to the preprocessed file in the cache
 func (p *Preprocessor) Process(slug string) (string, error) {
+	tempFilename := slug + ".tex"
+	tempPath := filepath.Join(p.vault.CachePath, tempFilename)
+
+	// 0. Check Cache
+	if p.enableCache {
+		info, err := os.Stat(tempPath)
+		if err == nil {
+			age := time.Since(info.ModTime())
+			if age.Minutes() < float64(p.cacheExpirationMins) {
+				return tempPath, nil
+			}
+		}
+	}
+
 	// 1. Get Source Content
 	note, err := p.repo.Get(context.Background(), slug)
 	if err != nil {
@@ -53,8 +72,6 @@ func (p *Preprocessor) Process(slug string) (string, error) {
 
 	// 4. Write to Cache
 	// We write to the cache directory so we don't clutter the notes folder
-	tempFilename := slug + ".tex"
-	tempPath := filepath.Join(p.vault.CachePath, tempFilename)
 
 	if err := os.WriteFile(tempPath, []byte(content), 0644); err != nil {
 		return "", fmt.Errorf("failed to write preprocessed file: %w", err)
@@ -65,22 +82,43 @@ func (p *Preprocessor) Process(slug string) (string, error) {
 
 // resolveReferences converts \lxnote{slug} and \ref{slug} (deprecated) to \href{./slug.pdf}{Title}
 func (p *Preprocessor) resolveReferences(content string, slugMap map[string]string) string {
-	// Primary: \lxnote{slug} - the new, recommended way to reference notes
-	lxnoteRegex := regexp.MustCompile(`\\lxnote\{([^}]+)\}`)
+	// Primary: \lxnote[optional text]{slug} or \lxnote{slug}
+	// Regex explanation:
+	//   \\lxnote       : Matches literal "\lxnote"
+	//   (?:\[(.*?)\])? : Non-capturing group for optional [text].
+	//                    (.*?) captures the content lazily into submatch 1.
+	//   \{([^}]+)\}    : Matches {slug}. Captures slug into submatch 2.
+	lxnoteRegex := regexp.MustCompile(`\\lxnote(?:\[(.*?)\])?\{([^}]+)\}`)
+
 	content = lxnoteRegex.ReplaceAllStringFunc(content, func(match string) string {
-		submatch := lxnoteRegex.FindStringSubmatch(match)
-		if len(submatch) < 2 {
+		submatches := lxnoteRegex.FindStringSubmatch(match)
+		// submatches[0] = full match
+		// submatches[1] = optional text (might be empty)
+		// submatches[2] = slug
+
+		if len(submatches) < 3 {
 			return match
 		}
-		targetSlug := submatch[1]
 
-		// \lxnote{} MUST refer to a note - error if not found
-		if title, exists := slugMap[targetSlug]; exists {
-			return fmt.Sprintf(`\href{./%s.pdf}{%s}`, targetSlug, title)
+		customText := strings.TrimSpace(submatches[1])
+		targetSlug := strings.TrimSpace(submatches[2])
+
+		// 1. Resolve Target Title
+		targetTitle, exists := slugMap[targetSlug]
+		if !exists {
+			return fmt.Sprintf(`\textbf{[BROKEN LINK: %s]}`, targetSlug)
 		}
 
-		// Note not found - render as warning text
-		return fmt.Sprintf(`\textbf{[BROKEN LINK: %s]}`, targetSlug)
+		// 2. Determine Display Text
+		// If user provided [custom text], use it. Otherwise, use the note's Title.
+		displayText := targetTitle
+		if customText != "" {
+			displayText = customText
+		}
+
+		// 3. Generate Hyperref
+		// We use relative paths so it works in the PDF viewer
+		return fmt.Sprintf(`\href{./%s.pdf}{%s}`, targetSlug, displayText)
 	})
 
 	// Legacy: \ref{slug} - deprecated, only converts if it matches a note slug

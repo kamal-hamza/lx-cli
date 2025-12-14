@@ -11,24 +11,44 @@ import (
 	"github.com/kamal-hamza/lx-cli/pkg/ui"
 )
 
-// OpenFileWithDefaultApp opens a file using the OS default application.
-// It handles macOS (open), Windows (start), and Linux (xdg-open).
-func OpenFileWithDefaultApp(path string) error {
+// GetPreferredEditor returns the editor command from config, env, or default
+func GetPreferredEditor() string {
+	// 1. Check Config
+	if appConfig != nil && appConfig.Editor != "" {
+		return appConfig.Editor
+	}
+	// 2. Check Environment
+	if env := os.Getenv("EDITOR"); env != "" {
+		return env
+	}
+	// 3. Fallback
+	return "vi"
+}
+
+// OpenFile opens a file using a custom viewer or the OS default application.
+func OpenFile(path string, viewer string) error {
 	var cmd *exec.Cmd
 
-	switch runtime.GOOS {
-	case "darwin":
-		// macOS
-		cmd = exec.Command("open", path)
-	case "windows":
-		// Windows (needs cmd /c start to detach properly)
-		cmd = exec.Command("cmd", "/c", "start", path)
-	default:
-		// Linux / Unix / FreeBSD
-		cmd = exec.Command("xdg-open", path)
+	if viewer != "" {
+		// Use user-configured viewer (e.g. zathura, skim)
+		cmd = exec.Command(viewer, path)
+	} else {
+		// Fallback to OS default
+		switch runtime.GOOS {
+		case "darwin":
+			cmd = exec.Command("open", path)
+		case "windows":
+			cmd = exec.Command("cmd", "/c", "start", path)
+		default:
+			cmd = exec.Command("xdg-open", path)
+		}
 	}
 
+	// We use Start() to detach the process so lx can exit while the viewer stays open
 	if err := cmd.Start(); err != nil {
+		if viewer != "" {
+			return fmt.Errorf("failed to open '%s' with '%s': %w", path, viewer, err)
+		}
 		return fmt.Errorf("failed to open '%s': %w", path, err)
 	}
 
@@ -37,10 +57,7 @@ func OpenFileWithDefaultApp(path string) error {
 
 // OpenEditorAtLine opens the user's preferred editor at a specific line number.
 func OpenEditorAtLine(path string, line int) error {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "vi" // Default fallback
-	}
+	editor := GetPreferredEditor()
 
 	var args []string
 	lowerEditor := strings.ToLower(editor)
@@ -55,7 +72,7 @@ func OpenEditorAtLine(path string, line int) error {
 		// Strategy 2: Sublime Text, Zed, IntelliJ/GoLand
 		// These support direct `file:line` syntax without flags
 	} else if strings.Contains(lowerEditor, "subl") ||
-		strings.Contains(lowerEditor, "zed") || // <--- Added Zed Support
+		strings.Contains(lowerEditor, "zed") ||
 		strings.Contains(lowerEditor, "idea") ||
 		strings.Contains(lowerEditor, "goland") {
 		args = []string{fmt.Sprintf("%s:%d", path, line)}

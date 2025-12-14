@@ -14,8 +14,8 @@ import (
 
 var syncCmd = &cobra.Command{
 	Use:     "sync",
+	Short:   "Sync notes with remote (Stash -> Pull -> Pop -> Push)",
 	Aliases: []string{"s"},
-	Short:   "Sync notes with remote (Stash -> Pull -> Pop -> Push) (alias: s)",
 	RunE:    runSync,
 }
 
@@ -55,8 +55,11 @@ func runSync(cmd *cobra.Command, args []string) error {
 	isDirty := len(strings.TrimSpace(string(output))) > 0
 	fmt.Println(ui.FormatSuccess("Done"))
 
-	// 3. Stash
-	if isDirty {
+	// 3. Stash (Only if dirty and auto-pull is enabled, or before any push if needed)
+	// We only need to stash if we are going to Pull
+	shouldPull := appConfig.GitAutoPull
+
+	if shouldPull && isDirty {
 		fmt.Print(ui.StyleWarning.Render("Stashing local changes... "))
 		if err := runQuiet("stash", "push", "-m", "lx-auto-stash"); err != nil {
 			fmt.Println(ui.FormatError("Failed"))
@@ -66,17 +69,21 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	// 4. Pull (Rebase)
-	fmt.Println(ui.StyleInfo.Render("Pulling remote changes..."))
-	if err := runInteractive("pull", "--rebase"); err != nil {
-		if isDirty {
-			fmt.Println(ui.FormatWarning("Pull failed. Restoring your changes..."))
-			runQuiet("stash", "pop")
+	if shouldPull {
+		fmt.Println(ui.StyleInfo.Render("Pulling remote changes..."))
+		if err := runInteractive("pull", "--rebase"); err != nil {
+			if isDirty {
+				fmt.Println(ui.FormatWarning("Pull failed. Restoring your changes..."))
+				runQuiet("stash", "pop")
+			}
+			return fmt.Errorf("pull failed: %w", err)
 		}
-		return fmt.Errorf("pull failed: %w", err)
+	} else {
+		fmt.Println(ui.FormatMuted("Skipping pull (git_auto_pull is false)"))
 	}
 
 	// 5. Pop Stash
-	if isDirty {
+	if shouldPull && isDirty {
 		fmt.Print(ui.StyleWarning.Render("Restoring local changes... "))
 		if err := runQuiet("stash", "pop"); err != nil {
 			fmt.Println(ui.FormatError("Conflict"))
@@ -91,8 +98,21 @@ func runSync(cmd *cobra.Command, args []string) error {
 	if isDirty {
 		fmt.Print(ui.StyleInfo.Render("Committing... "))
 		runQuiet("add", "-A")
-		timestamp := time.Now().Format("2006-01-02 15:04")
-		if err := runQuiet("commit", "-m", "lx sync: "+timestamp); err != nil {
+
+		// Calculate message
+		msg := appConfig.GitCommitTemplate
+		now := time.Now()
+		msg = strings.ReplaceAll(msg, "{date}", now.Format("2006-01-02"))
+		msg = strings.ReplaceAll(msg, "{time}", now.Format("15:04:05"))
+
+		// Calculate rough change count
+		countCmd := exec.Command("git", "diff", "--name-only", "--cached")
+		countCmd.Dir = appVault.RootPath
+		out, _ := countCmd.Output()
+		count := len(strings.Split(strings.TrimSpace(string(out)), "\n"))
+		msg = strings.ReplaceAll(msg, "{count}", fmt.Sprintf("%d", count))
+
+		if err := runQuiet("commit", "-m", msg); err != nil {
 			return err
 		}
 		fmt.Println(ui.FormatSuccess("Done"))

@@ -20,9 +20,10 @@ var tagCmd = &cobra.Command{
 }
 
 var tagAddCmd = &cobra.Command{
-	Use:   "add [query] [tags]",
-	Short: "Add tags to a note",
-	Example: `  lx tag add graph "math, study"
+	Use:     "add [query] [tags]",
+	Short:   "Add tags to a note",
+	Aliases: []string{"a"},
+	Example: `  lx tag add graph "math, study (alias: lx t a graph "math, study")"
   lx tag add "Linear Algebra" final-review`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -31,9 +32,10 @@ var tagAddCmd = &cobra.Command{
 }
 
 var tagRemoveCmd = &cobra.Command{
-	Use:   "remove [query] [tags]",
-	Short: "Remove tags from a note",
-	Example: `  lx tag remove graph "math"
+	Use:     "remove [query] [tags]",
+	Short:   "Remove tags from a note",
+	Aliases: []string{"r"},
+	Example: `  lx tag remove graph "math (alias: lx t r graph "math")"
   lx tag remove "Linear Algebra" final-review`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {

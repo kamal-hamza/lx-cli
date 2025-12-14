@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,8 +18,8 @@ var (
 // newCmd represents the new command
 var newCmd = &cobra.Command{
 	Use:     "new [title|template] [title]",
+	Short:   "Create a new LaTeX note or template",
 	Aliases: []string{"n", "create"},
-	Short:   "Create a new LaTeX note or template (aliases: n, create)",
 	Long: `Create a new LaTeX note with optional template and tags, or create a new template.
 
 Examples:
@@ -43,8 +41,8 @@ func init() {
 
 // runNewDispatcher determines whether to create a note or template
 func runNewDispatcher(cmd *cobra.Command, args []string) error {
-	// Check if first arg is "template"
-	if args[0] == "template" {
+	// Check if first arg is "template" OR "t"
+	if args[0] == "template" || args[0] == "t" {
 		if len(args) < 2 {
 			fmt.Println(ui.FormatError("Template title is required"))
 			return fmt.Errorf("usage: lx new template \"title\"")
@@ -64,6 +62,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 		Title:        title,
 		Tags:         newTags,
 		TemplateName: newTemplateName,
+		DateFormat:   appConfig.DateFormat, // Use configured date format
 	}
 
 	ctx := getContext()
@@ -90,22 +89,12 @@ func runNew(cmd *cobra.Command, args []string) error {
 	// Get the full path
 	notePath := appVault.GetNotePath(resp.FilePath)
 
-	// Open in editor
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "vi" // Default fallback
-	}
-
+	// Use preferred editor
+	editor := GetPreferredEditor()
 	fmt.Println(ui.FormatInfo("Opening in editor: " + editor))
 	fmt.Println()
 
-	// Launch editor
-	editorCmd := exec.Command(editor, notePath)
-	editorCmd.Stdin = os.Stdin
-	editorCmd.Stdout = os.Stdout
-	editorCmd.Stderr = os.Stderr
-
-	if err := editorCmd.Run(); err != nil {
+	if err := OpenEditorAtLine(notePath, 1); err != nil {
 		fmt.Println(ui.FormatWarning("Failed to open editor: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually edit: " + notePath))
 	}
@@ -140,22 +129,12 @@ func runNewTemplate(cmd *cobra.Command, args []string) error {
 	// Get the full path
 	templatePath := appVault.GetTemplatePath(resp.FilePath)
 
-	// Open in editor
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "vi" // Default fallback
-	}
-
+	// Use preferred editor
+	editor := GetPreferredEditor()
 	fmt.Println(ui.FormatInfo("Opening in editor: " + editor))
 	fmt.Println()
 
-	// Launch editor
-	editorCmd := exec.Command(editor, templatePath)
-	editorCmd.Stdin = os.Stdin
-	editorCmd.Stdout = os.Stdout
-	editorCmd.Stderr = os.Stderr
-
-	if err := editorCmd.Run(); err != nil {
+	if err := OpenEditorAtLine(templatePath, 1); err != nil {
 		fmt.Println(ui.FormatWarning("Failed to open editor: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually edit: " + templatePath))
 	}

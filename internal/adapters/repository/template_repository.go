@@ -14,54 +14,72 @@ import (
 
 // TemplateRepository implements the TemplateRepository port using the file system
 type TemplateRepository struct {
-	vault *vault.Vault
+	vault             *vault.Vault
+	customTemplateDir string
 }
 
 // NewTemplateRepository creates a new file-based template repository
-func NewTemplateRepository(vault *vault.Vault) *TemplateRepository {
+func NewTemplateRepository(vault *vault.Vault, customTemplateDir string) *TemplateRepository {
 	return &TemplateRepository{
-		vault: vault,
+		vault:             vault,
+		customTemplateDir: customTemplateDir,
 	}
 }
 
-// List returns all available templates
+// List returns all available templates (including custom ones)
 func (r *TemplateRepository) List(ctx context.Context) ([]domain.Template, error) {
 	var templates []domain.Template
 
-	entries, err := os.ReadDir(r.vault.TemplatesPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return templates, nil
-		}
+	// 1. Scan Vault Templates
+	vaultTemplates, err := r.scanDirectory(r.vault.TemplatesPath)
+	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("failed to read templates directory: %w", err)
+	}
+	templates = append(templates, vaultTemplates...)
+
+	// 2. Scan Custom Directory if set
+	if r.customTemplateDir != "" {
+		dir := r.expandPath(r.customTemplateDir)
+		customTemplates, err := r.scanDirectory(dir)
+		if err == nil {
+			templates = append(templates, customTemplates...)
+		}
+	}
+
+	return templates, nil
+}
+
+func (r *TemplateRepository) scanDirectory(dir string) ([]domain.Template, error) {
+	var templates []domain.Template
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sty") {
 			continue
 		}
-
 		name := strings.TrimSuffix(entry.Name(), ".sty")
-		path := r.vault.GetTemplatePath(entry.Name())
-
 		templates = append(templates, domain.Template{
 			Name: name,
-			Path: path,
+			Path: filepath.Join(dir, entry.Name()),
 		})
 	}
-
 	return templates, nil
+}
+
+func (r *TemplateRepository) expandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }
 
 // Exists checks if a template with the given name exists
 func (r *TemplateRepository) Exists(ctx context.Context, name string) bool {
-	filename := name
-	if !strings.HasSuffix(filename, ".sty") {
-		filename = name + ".sty"
-	}
-
-	path := r.vault.GetTemplatePath(filename)
-	_, err := os.Stat(path)
+	_, err := r.Get(ctx, name)
 	return err == nil
 }
 
@@ -72,29 +90,38 @@ func (r *TemplateRepository) Get(ctx context.Context, name string) (*domain.Temp
 		filename = name + ".sty"
 	}
 
+	// Check Vault
 	path := r.vault.GetTemplatePath(filename)
-	_, err := os.Stat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("template not found: %s", name)
-		}
-		return nil, fmt.Errorf("failed to access template: %w", err)
+	if _, err := os.Stat(path); err == nil {
+		return &domain.Template{
+			Name: strings.TrimSuffix(filepath.Base(filename), ".sty"),
+			Path: path,
+		}, nil
 	}
 
-	return &domain.Template{
-		Name: strings.TrimSuffix(filepath.Base(filename), ".sty"),
-		Path: path,
-	}, nil
+	// Check Custom Dir
+	if r.customTemplateDir != "" {
+		dir := r.expandPath(r.customTemplateDir)
+		path = filepath.Join(dir, filename)
+		if _, err := os.Stat(path); err == nil {
+			return &domain.Template{
+				Name: strings.TrimSuffix(filepath.Base(filename), ".sty"),
+				Path: path,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("template not found: %s", name)
 }
 
-// Create creates a new template file
+// Create creates a new template file (Always creates in Vault)
 func (r *TemplateRepository) Create(ctx context.Context, template *domain.TemplateBody) error {
 	// Generate filename from slug
 	filename := template.Header.Slug + ".sty"
 	path := r.vault.GetTemplatePath(filename)
 
 	// Check if template already exists
-	if _, err := os.Stat(path); err == nil {
+	if r.Exists(ctx, template.Header.Slug) {
 		return fmt.Errorf("template already exists: %s", template.Header.Slug)
 	}
 

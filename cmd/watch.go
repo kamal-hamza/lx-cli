@@ -16,8 +16,8 @@ import (
 
 var watchCmd = &cobra.Command{
 	Use:     "watch [query]",
+	Short:   "Live preview a note (auto-build on save)",
 	Aliases: []string{"w"},
-	Short:   "Live preview a note (auto-build on save) (alias: w)",
 	Long: `Continuously rebuild a note whenever you save it.
 
 This uses a file watcher to trigger the Preprocess -> Compile cycle
@@ -122,7 +122,8 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			// Open viewer on first success
 			if !hasOpenedViewer {
 				fmt.Println(ui.FormatInfo("Opening PDF viewer..."))
-				if err := OpenFileWithDefaultApp(pdfPath); err != nil {
+				// Pass custom PDF viewer from config (or empty string for default)
+				if err := OpenFile(pdfPath, appConfig.PDFViewer); err != nil {
 					fmt.Println(ui.FormatWarning("Failed to open PDF: " + err.Error()))
 				}
 				hasOpenedViewer = true
@@ -148,7 +149,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 	// Debounce setup
 	var debounceTimer *time.Timer
-	const debounceDuration = 500 * time.Millisecond
+	debounceDuration := time.Duration(appConfig.WatchDebounceMS) * time.Millisecond
 
 	for {
 		select {

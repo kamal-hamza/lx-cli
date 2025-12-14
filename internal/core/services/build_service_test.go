@@ -19,7 +19,7 @@ func TestBuildService_Execute_Success(t *testing.T) {
 	svc := NewBuildServiceWithPreprocessor(mockRepo, mockCompiler, mockPreprocessor, nil)
 
 	// Create a test note
-	header, _ := domain.NewNoteHeader("Build Test Note", []string{"tag1"})
+	header, _ := domain.NewNoteHeader("Build Test Note", []string{"tag1"}, "Test.md")
 	note := domain.NewNoteBody(header, "\\section{Test Content}")
 	mockRepo.Save(context.Background(), note)
 
@@ -95,7 +95,7 @@ func TestBuildService_Execute_PreprocessingFailure(t *testing.T) {
 	mockPreprocessor := mocks.NewMockPreprocessor()
 	svc := NewBuildServiceWithPreprocessor(mockRepo, mockCompiler, mockPreprocessor, nil)
 
-	header, _ := domain.NewNoteHeader("Bad Note", []string{})
+	header, _ := domain.NewNoteHeader("Bad Note", []string{}, "Bad.md")
 	note := domain.NewNoteBody(header, "content")
 	mockRepo.Save(context.Background(), note)
 
@@ -126,7 +126,7 @@ func TestBuildService_Execute_CompilationFailure(t *testing.T) {
 	mockPreprocessor := mocks.NewMockPreprocessor()
 	svc := NewBuildServiceWithPreprocessor(mockRepo, mockCompiler, mockPreprocessor, nil)
 
-	header, _ := domain.NewNoteHeader("Failing Build", []string{})
+	header, _ := domain.NewNoteHeader("Failing Build", []string{}, "Fail.md")
 	note := domain.NewNoteBody(header, "\\invalid{latex}")
 	mockRepo.Save(context.Background(), note)
 
@@ -167,7 +167,7 @@ func TestBuildService_ExecuteAll_Success(t *testing.T) {
 	}
 
 	for _, n := range notes {
-		header, _ := domain.NewNoteHeader(n.title, n.tags)
+		header, _ := domain.NewNoteHeader(n.title, n.tags, "Test.md")
 		note := domain.NewNoteBody(header, "\\section{Content}")
 		mockRepo.Save(context.Background(), note)
 	}
@@ -200,7 +200,7 @@ func TestBuildService_ExecuteAllWithProgress_Success(t *testing.T) {
 	noteCount := 3
 	for i := 0; i < noteCount; i++ {
 		title := fmt.Sprintf("Note %d", i+1)
-		header, _ := domain.NewNoteHeader(title, []string{})
+		header, _ := domain.NewNoteHeader(title, []string{}, "Note.md")
 		note := domain.NewNoteBody(header, "\\section{Content}")
 		mockRepo.Save(context.Background(), note)
 	}

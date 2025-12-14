@@ -22,8 +22,8 @@ var (
 // openCmd represents the open command
 var openCmd = &cobra.Command{
 	Use:     "open [query]",
+	Short:   "Open a note PDF or template in the default viewer",
 	Aliases: []string{"o"},
-	Short:   "Open a note PDF or template in the default viewer (alias: o)",
 	Long: `Open a note PDF or template using fuzzy search.
 If no query is provided, shows an interactive list to select from.
 
@@ -126,7 +126,7 @@ func runOpenNote(cmd *cobra.Command, args []string) error {
 				preview := fmt.Sprintf("Title: %s\nSlug: %s\nDate: %s",
 					note.Title,
 					note.Slug,
-					note.GetDisplayDate())
+					note.GetDisplayDate(appConfig.DisplayDateFormat))
 				if len(note.Tags) > 0 {
 					preview += fmt.Sprintf("\nTags: %s", note.GetTagsString())
 				}
@@ -198,8 +198,8 @@ func runOpenNote(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Open PDF with system default viewer
-	if err := OpenFileWithDefaultApp(pdfPath); err != nil {
+	// Open PDF with configured viewer or default
+	if err := OpenFile(pdfPath, appConfig.PDFViewer); err != nil {
 		fmt.Println(ui.FormatError("Failed to open PDF: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually open: " + pdfPath))
 		return err
@@ -320,8 +320,8 @@ func runOpenTemplate(cmd *cobra.Command, args []string) error {
 	// Get the template file path
 	templatePath := selectedTemplate.Path
 
-	// Open with system default viewer
-	if err := OpenFileWithDefaultApp(templatePath); err != nil {
+	// Open with system default viewer (templates are text files, usually default is fine)
+	if err := OpenFile(templatePath, ""); err != nil {
 		fmt.Println(ui.FormatError("Failed to open template: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually open: " + templatePath))
 		return err
