@@ -7,6 +7,7 @@ import (
 
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/internal/core/ports"
+	"github.com/kamal-hamza/lx-cli/pkg/config"
 	"github.com/kamal-hamza/lx-cli/pkg/metadata"
 )
 
@@ -14,13 +15,22 @@ import (
 type CreateNoteService struct {
 	noteRepo     ports.Repository
 	templateRepo ports.TemplateRepository
+	gitService   *GitService
+	config       *config.Config
 }
 
 // NewCreateNoteService creates a new note creation service
-func NewCreateNoteService(noteRepo ports.Repository, templateRepo ports.TemplateRepository) *CreateNoteService {
+func NewCreateNoteService(
+	noteRepo ports.Repository,
+	templateRepo ports.TemplateRepository,
+	git *GitService,
+	cfg *config.Config,
+) *CreateNoteService {
 	return &CreateNoteService{
 		noteRepo:     noteRepo,
 		templateRepo: templateRepo,
+		gitService:   git,
+		config:       cfg,
 	}
 }
 
@@ -68,6 +78,14 @@ func (s *CreateNoteService) Execute(ctx context.Context, req CreateNoteRequest) 
 	// Save the note
 	if err := s.noteRepo.Save(ctx, note); err != nil {
 		return nil, fmt.Errorf("failed to save note: %w", err)
+	}
+
+	// Auto-Backup (if enabled)
+	if s.config.AutoBackup && s.gitService != nil {
+		commitMsg := fmt.Sprintf("Add note: %s", req.Title)
+		if err := s.gitService.CommitChanges(commitMsg); err != nil {
+			fmt.Printf("Warning: Auto-backup failed: %v\n", err)
+		}
 	}
 
 	return &CreateNoteResponse{

@@ -3,110 +3,211 @@ package services
 import (
 	"context"
 	"fmt"
-	"sort"
+	"strings"
 
-	"github.com/kamal-hamza/lx-cli/internal/core/domain"
+	"github.com/kamal-hamza/lx-cli/internal/core/ports"
+	"github.com/kamal-hamza/lx-cli/pkg/config"
 )
 
-type GraphService struct {
-	indexer *IndexerService
-}
-
-func NewGraphService(indexer *IndexerService) *GraphService {
-	return &GraphService{
-		indexer: indexer,
-	}
-}
-
-// Data Structures (Keep existing JSON contract)
-type GraphData struct {
-	Nodes []GraphNode `json:"nodes"`
-	Links []GraphLink `json:"links"`
-}
-
+// GraphNode represents a node in the knowledge graph
 type GraphNode struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Group int    `json:"group"`
-	Value int    `json:"val"`
+	ID    string
+	Title string
+	Tags  []string
 }
 
+// GraphLink represents a connection between two nodes
 type GraphLink struct {
-	Source string `json:"source"`
-	Target string `json:"target"`
-	Value  int    `json:"value"`
+	Source string
+	Target string
 }
 
-// GetGraph retrieves the graph data from the Index
-func (s *GraphService) GetGraph(ctx context.Context, forceRefresh bool) (GraphData, error) {
-	// 1. Ensure Index is loaded/fresh
-	var index *domain.Index
-	var err error
+// GraphData contains the full graph structure
+type GraphData struct {
+	Nodes []GraphNode
+	Links []GraphLink
+}
 
-	if forceRefresh || !s.indexer.IndexExists() {
-		// Rebuild if forced or missing
-		_, err := s.indexer.Execute(ctx, ReindexRequest{})
-		if err != nil {
-			return GraphData{}, fmt.Errorf("failed to generate index: %w", err)
-		}
+type GraphService struct {
+	repo   ports.Repository
+	config *config.Config
+}
+
+// NewGraphService creates a new instance of GraphService with config
+func NewGraphService(repo ports.Repository, cfg *config.Config) *GraphService {
+	return &GraphService{
+		repo:   repo,
+		config: cfg,
 	}
+}
 
-	index, err = s.indexer.LoadIndex()
+// GenerateGraphDOT generates a DOT format string for the note graph
+func (s *GraphService) GenerateGraphDOT(ctx context.Context) (string, error) {
+	notes, err := s.repo.ListHeaders(ctx)
 	if err != nil {
-		return GraphData{}, err
+		return "", fmt.Errorf("failed to list notes for graph: %w", err)
 	}
 
-	// 2. Transform Index to GraphData
-	nodes := make([]GraphNode, 0, len(index.Notes))
-	links := make([]GraphLink, 0)
+	// 1. Apply MaxNodes Limit
+	maxNodes := s.config.GraphMaxNodes
+	if maxNodes > 0 && len(notes) > maxNodes {
+		notes = notes[:maxNodes]
+	}
 
-	// Track connections for node sizing
-	connectionCounts := make(map[string]int)
+	// 2. Build map for quick lookup
+	existingSlugs := make(map[string]bool)
+	for _, n := range notes {
+		existingSlugs[n.Slug] = true
+	}
 
-	// Create Links
-	for sourceSlug, entry := range index.Notes {
-		// Outgoing links
-		for _, targetSlug := range entry.OutgoingLinks {
-			// Ensure target exists in index (avoid broken links in graph)
-			if _, exists := index.Notes[targetSlug]; exists {
-				links = append(links, GraphLink{
-					Source: sourceSlug,
-					Target: targetSlug,
-					Value:  1,
-				})
-				connectionCounts[sourceSlug]++
-				connectionCounts[targetSlug]++
+	var sb strings.Builder
+
+	// 3. Apply Direction Config
+	direction := s.config.GraphDirection
+	if direction == "" {
+		direction = "LR"
+	}
+
+	sb.WriteString("digraph G {\n")
+	sb.WriteString(fmt.Sprintf("  rankdir=%s;\n", direction))
+	sb.WriteString("  node [shape=box, style=filled, fillcolor=\"#f9f9f9\", fontname=\"Helvetica\"];\n")
+	sb.WriteString("  edge [color=\"#555555\"];\n")
+
+	for _, note := range notes {
+		safeSlug := strings.ReplaceAll(note.Slug, "-", "_")
+		sb.WriteString(fmt.Sprintf("  \"%s\" [label=\"%s\"];\n", safeSlug, note.Title))
+
+		for _, link := range note.Tags {
+			if strings.HasPrefix(link, "link:") {
+				target := strings.TrimPrefix(link, "link:")
+				if existingSlugs[target] {
+					safeTarget := strings.ReplaceAll(target, "-", "_")
+					sb.WriteString(fmt.Sprintf("  \"%s\" -> \"%s\";\n", safeSlug, safeTarget))
+				}
 			}
 		}
 	}
 
-	// Create Nodes
-	for slug, entry := range index.Notes {
-		val := connectionCounts[slug]
-		if val == 0 {
-			val = 1 // Minimum size
-		}
+	sb.WriteString("}\n")
+	return sb.String(), nil
+}
 
-		// Simple grouping by first tag, or default 1
-		group := 1
-		if len(entry.Tags) > 0 {
-			// Simple hash of tag string to int group
-			group = int(entry.Tags[0][0])
-		}
-
-		nodes = append(nodes, GraphNode{
-			ID:    slug,
-			Title: entry.Title,
-			Group: group,
-			Value: val,
-		})
+// GetGraph returns the graph data structure for interactive visualization
+func (s *GraphService) GetGraph(ctx context.Context, forceRefresh bool) (GraphData, error) {
+	notes, err := s.repo.ListHeaders(ctx)
+	if err != nil {
+		return GraphData{}, fmt.Errorf("failed to list notes for graph: %w", err)
 	}
 
-	// Sort for deterministic output
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
+	// Apply MaxNodes Limit
+	maxNodes := s.config.GraphMaxNodes
+	if maxNodes > 0 && len(notes) > maxNodes {
+		notes = notes[:maxNodes]
+	}
+
+	// Build graph data
+	var nodes []GraphNode
+	var links []GraphLink
+	existingSlugs := make(map[string]bool)
+
+	// First pass: create nodes
+	for _, note := range notes {
+		nodes = append(nodes, GraphNode{
+			ID:    note.Slug,
+			Title: note.Title,
+			Tags:  note.Tags,
+		})
+		existingSlugs[note.Slug] = true
+	}
+
+	// Second pass: create links
+	// Look for various link patterns in the content
+	for _, note := range notes {
+		// Get the full note to analyze links
+		fullNote, err := s.repo.Get(ctx, note.Slug)
+		if err != nil {
+			continue // Skip if we can't read the note
+		}
+
+		// Extract links from content
+		linkedSlugs := extractLinksFromContent(fullNote.Content)
+		for _, targetSlug := range linkedSlugs {
+			// Only create link if target exists
+			if existingSlugs[targetSlug] {
+				links = append(links, GraphLink{
+					Source: note.Slug,
+					Target: targetSlug,
+				})
+			}
+		}
+
+		// Also check tags for link: prefix
+		for _, tag := range note.Tags {
+			if strings.HasPrefix(tag, "link:") {
+				targetSlug := strings.TrimPrefix(tag, "link:")
+				if existingSlugs[targetSlug] {
+					links = append(links, GraphLink{
+						Source: note.Slug,
+						Target: targetSlug,
+					})
+				}
+			}
+		}
+	}
 
 	return GraphData{
 		Nodes: nodes,
 		Links: links,
 	}, nil
+}
+
+// extractLinksFromContent extracts note references from LaTeX content
+func extractLinksFromContent(content string) []string {
+	var links []string
+	seen := make(map[string]bool)
+
+	// Look for common LaTeX reference patterns
+	patterns := []string{
+		`\ref{`,
+		`\cite{`,
+		`\input{`,
+		`\include{`,
+	}
+
+	for _, pattern := range patterns {
+		idx := 0
+		for {
+			idx = strings.Index(content[idx:], pattern)
+			if idx == -1 {
+				break
+			}
+			idx += len(pattern)
+
+			// Find the closing brace
+			end := strings.Index(content[idx:], "}")
+			if end == -1 {
+				break
+			}
+
+			ref := content[idx : idx+end]
+			// Clean up the reference to get just the slug
+			ref = strings.TrimSpace(ref)
+			ref = strings.TrimSuffix(ref, ".tex")
+
+			// Extract just the filename if it's a path
+			if strings.Contains(ref, "/") {
+				parts := strings.Split(ref, "/")
+				ref = parts[len(parts)-1]
+			}
+
+			if ref != "" && !seen[ref] {
+				links = append(links, ref)
+				seen[ref] = true
+			}
+
+			idx += end + 1
+		}
+	}
+
+	return links
 }

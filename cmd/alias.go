@@ -63,10 +63,7 @@ func init() {
 }
 
 func runAliasList(cmd *cobra.Command, args []string) error {
-	cfg, err := loadConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
+	cfg := appConfig
 
 	if len(cfg.Aliases) == 0 {
 		fmt.Println(ui.FormatInfo("No aliases defined"))
@@ -122,10 +119,7 @@ func runAliasAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot create alias '%s': conflicts with existing command", name)
 	}
 
-	cfg, err := loadConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
+	cfg := appConfig
 
 	// Check if alias already exists
 	if existing, ok := cfg.Aliases[name]; ok {
@@ -156,10 +150,7 @@ func runAliasAdd(cmd *cobra.Command, args []string) error {
 func runAliasRemove(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
-	cfg, err := loadConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
+	cfg := appConfig
 
 	// Check if alias exists
 	command, ok := cfg.Aliases[name]

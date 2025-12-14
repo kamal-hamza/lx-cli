@@ -151,13 +151,16 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 
 	preprocessor = services.NewPreprocessor(noteRepo, appVault)
 
+	// Initialize Git service
+	gitService := services.NewGitService(appVault.RootPath)
+
 	// Initialize services
-	createNoteService = services.NewCreateNoteService(noteRepo, templateRepo)
+	createNoteService = services.NewCreateNoteService(noteRepo, templateRepo, gitService, appConfig)
 	createTemplateService = services.NewCreateTemplateService(templateRepo)
 	buildService = services.NewBuildServiceWithPreprocessor(noteRepo, latexCompiler, preprocessor, appVault)
 	listService = services.NewListService(noteRepo)
 	indexerService = services.NewIndexerService(noteRepo, appVault.IndexPath())
-	graphService = services.NewGraphService(indexerService)
+	graphService = services.NewGraphService(noteRepo, appConfig)
 	grepService = services.NewGrepService(appVault.RootPath)
 
 	return nil

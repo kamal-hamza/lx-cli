@@ -49,10 +49,12 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	for _, n := range data.Nodes {
 		slugToTitle[n.ID] = n.Title
 
+		// Use default value since GraphNode doesn't have a Value field
+		defaultValue := 10
 		echartsNodes = append(echartsNodes, opts.GraphNode{
 			Name:       n.Title,
-			Value:      float32(n.Value),
-			SymbolSize: calculateSymbolSize(n.Value),
+			Value:      float32(defaultValue),
+			SymbolSize: calculateSymbolSize(defaultValue),
 			Tooltip:    &opts.Tooltip{Show: opts.Bool(true), Formatter: types.FuncStr(fmt.Sprintf("{b}<br/>(%s)", n.ID))},
 		})
 	}

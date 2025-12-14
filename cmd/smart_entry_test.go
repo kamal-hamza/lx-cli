@@ -112,7 +112,7 @@ func TestLoadConfig_Success(t *testing.T) {
 		DefaultAction: "edit",
 		MaxWorkers:    4,
 	}
-	if err := cfg.Save(v.ConfigPath); err != nil {
+	if err := cfg.Save(configPath); err != nil {
 		t.Fatalf("Failed to save config: %v", err)
 	}
 

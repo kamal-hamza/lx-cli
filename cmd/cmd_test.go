@@ -5,6 +5,7 @@ import (
 
 	"github.com/kamal-hamza/lx-cli/internal/core/ports/mocks"
 	"github.com/kamal-hamza/lx-cli/internal/core/services"
+	"github.com/kamal-hamza/lx-cli/pkg/config"
 )
 
 // TestCommandStructure verifies that all commands are properly registered
@@ -70,7 +71,9 @@ func TestServiceInitialization(t *testing.T) {
 	mockTemplateRepo := mocks.NewMockTemplateRepository()
 
 	// Test CreateNoteService
-	createNoteService := services.NewCreateNoteService(mockNoteRepo, mockTemplateRepo)
+	mockGitService := services.NewGitService("/tmp/test")
+	mockConfig := &config.Config{}
+	createNoteService := services.NewCreateNoteService(mockNoteRepo, mockTemplateRepo, mockGitService, mockConfig)
 	if createNoteService == nil {
 		t.Error("CreateNoteService is nil")
 	}

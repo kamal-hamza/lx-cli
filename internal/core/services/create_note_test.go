@@ -6,6 +6,7 @@ import (
 
 	"github.com/kamal-hamza/lx-cli/internal/core/domain"
 	"github.com/kamal-hamza/lx-cli/internal/core/ports/mocks"
+	"github.com/kamal-hamza/lx-cli/pkg/config"
 )
 
 func TestCreateNoteService_Execute(t *testing.T) {
@@ -140,7 +141,9 @@ func TestCreateNoteService_Execute(t *testing.T) {
 			tt.setupMocks(mockNoteRepo, mockTemplateRepo)
 
 			// Create service
-			service := NewCreateNoteService(mockNoteRepo, mockTemplateRepo)
+			mockGitService := NewGitService("/tmp/test")
+			mockConfig := &config.Config{DateFormat: "2006-01-02"}
+			service := NewCreateNoteService(mockNoteRepo, mockTemplateRepo, mockGitService, mockConfig)
 
 			// Execute
 			ctx := context.Background()
@@ -228,7 +231,9 @@ func TestCreateNoteService_SlugGeneration(t *testing.T) {
 		t.Run(tt.title, func(t *testing.T) {
 			mockNoteRepo := mocks.NewMockRepository()
 			mockTemplateRepo := mocks.NewMockTemplateRepository()
-			service := NewCreateNoteService(mockNoteRepo, mockTemplateRepo)
+			mockGitService := NewGitService("/tmp/test")
+			mockConfig := &config.Config{DateFormat: "2006-01-02"}
+			service := NewCreateNoteService(mockNoteRepo, mockTemplateRepo, mockGitService, mockConfig)
 
 			req := CreateNoteRequest{
 				Title:        tt.title,
@@ -252,7 +257,9 @@ func TestCreateNoteService_SlugGeneration(t *testing.T) {
 func TestCreateNoteService_ContentGeneration(t *testing.T) {
 	mockNoteRepo := mocks.NewMockRepository()
 	mockTemplateRepo := mocks.NewMockTemplateRepository()
-	service := NewCreateNoteService(mockNoteRepo, mockTemplateRepo)
+	mockGitService := NewGitService("/tmp/test")
+	mockConfig := &config.Config{DateFormat: "2006-01-02"}
+	service := NewCreateNoteService(mockNoteRepo, mockTemplateRepo, mockGitService, mockConfig)
 
 	req := CreateNoteRequest{
 		Title:        "Test Content Generation",

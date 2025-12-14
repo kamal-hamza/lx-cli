@@ -9,41 +9,35 @@ import (
 )
 
 type Config struct {
-	Compiler string `yaml:"compiler"`
+	Compiler        string            `yaml:"compiler"`
+	DefaultTemplate string            `yaml:"default_template"`
+	DailyTemplate   string            `yaml:"daily_template"`
+	Editor          string            `yaml:"editor"`
+	MaxWorkers      int               `yaml:"max_workers"`
+	LatexmkFlags    []string          `yaml:"latexmk_flags"`
+	DefaultAction   string            `yaml:"default_action"`
+	DefaultSort     string            `yaml:"default_sort"`
+	ReverseSort     bool              `yaml:"reverse_sort"`
+	DateFormat      string            `yaml:"date_format"`
+	PDFViewer       string            `yaml:"pdf_viewer"`
+	Aliases         map[string]string `yaml:"aliases"`
 
-	// Default template for standard notes
-	DefaultTemplate string `yaml:"default_template"`
+	// Feature Flags
+	AutoReindex bool `yaml:"auto_reindex"`
 
-	// Template for daily notes
-	DailyTemplate string `yaml:"daily_template"`
+	// Graph Settings
+	GraphDirection string `yaml:"graph_direction"`
+	GraphMaxNodes  int    `yaml:"graph_max_nodes"`
 
-	Editor     string `yaml:"editor"`
-	MaxWorkers int    `yaml:"max_workers"`
+	// Backup Settings
+	AutoBackup      bool `yaml:"auto_backup"`
+	BackupRetention int  `yaml:"backup_retention"`
 
-	// LaTeX compilation flags
-	LatexmkFlags []string `yaml:"latexmk_flags"`
-
-	// Custom command aliases
-	Aliases map[string]string `yaml:"aliases"`
-
-	// Default action when running 'lx' without arguments
-	DefaultAction string `yaml:"default_action"`
-
-	// Custom PDF viewer (e.g. "zathura", "skim")
-	PDFViewer string `yaml:"pdf_viewer"`
-
-	// List command defaults
-	DefaultSort string `yaml:"default_sort"` // "date" or "title"
-	ReverseSort bool   `yaml:"reverse_sort"`
-
-	// File naming conventions
-	DateFormat string `yaml:"date_format"` // e.g. "20060102" or "2006-01-02"
-
-	// Git settings
+	// Git Settings
 	GitAutoPull bool `yaml:"git_auto_pull"`
 }
 
-// DefaultConfig returns a config with default values
+// DefaultConfig returns a Config struct with default values
 func DefaultConfig() *Config {
 	return &Config{
 		Compiler:        "latexmk",
@@ -51,76 +45,81 @@ func DefaultConfig() *Config {
 		DailyTemplate:   "",
 		Editor:          "",
 		MaxWorkers:      4,
-		LatexmkFlags:    []string{"-pdf", "-interaction=nonstopmode"},
-		Aliases:         make(map[string]string),
+		LatexmkFlags:    []string{},
 		DefaultAction:   "open",
-		PDFViewer:       "",
 		DefaultSort:     "date",
 		ReverseSort:     false,
-		DateFormat:      "20060102", // Default YYYYMMDD
-		GitAutoPull:     true,       // Default to auto-pull for safety
+		DateFormat:      "2006-01-02",
+		PDFViewer:       "xdg-open",
+		Aliases:         make(map[string]string),
+		AutoReindex:     false,
+		GraphDirection:  "LR",
+		GraphMaxNodes:   0,
+		AutoBackup:      false,
+		BackupRetention: 7,
+		GitAutoPull:     false,
 	}
 }
 
-// Load loads the configuration from the specified path
+// Load reads configuration from the specified file path
 func Load(path string) (*Config, error) {
-	// If file doesn't exist, return default config
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return DefaultConfig(), nil
-	}
+	// Start with default config
+	cfg := DefaultConfig()
 
+	// Try to read the file
 	data, err := os.ReadFile(path)
 	if err != nil {
+		// If file doesn't exist, return default config (not an error)
+		if os.IsNotExist(err) {
+			return cfg, nil
+		}
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	cfg := DefaultConfig()
+	// Parse YAML
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// Apply defaults
+	// Ensure map is initialized if nil
+	if cfg.Aliases == nil {
+		cfg.Aliases = make(map[string]string)
+	}
+
+	// Apply defaults for missing values
 	if cfg.Compiler == "" {
 		cfg.Compiler = "latexmk"
 	}
 	if cfg.MaxWorkers <= 0 {
 		cfg.MaxWorkers = 4
 	}
-	if len(cfg.LatexmkFlags) == 0 {
-		cfg.LatexmkFlags = []string{"-pdf", "-interaction=nonstopmode"}
-	}
-	if cfg.Aliases == nil {
-		cfg.Aliases = make(map[string]string)
-	}
-	if cfg.DateFormat == "" {
-		cfg.DateFormat = "20060102"
+	if cfg.DefaultAction == "" {
+		cfg.DefaultAction = "open"
 	}
 	if cfg.DefaultSort == "" {
 		cfg.DefaultSort = "date"
 	}
-
-	// Validate DefaultAction
-	validActions := map[string]bool{
-		"open":    true,
-		"daily":   true,
-		"todo":    true,
-		"graph":   true,
-		"stats":   true,
-		"grep":    true,
-		"explore": true,
-		"edit":    true,
-		"list":    true,
+	if cfg.DateFormat == "" {
+		cfg.DateFormat = "2006-01-02"
+	}
+	if cfg.PDFViewer == "" {
+		cfg.PDFViewer = "xdg-open"
+	}
+	if cfg.GraphDirection == "" {
+		cfg.GraphDirection = "LR"
 	}
 
-	if !validActions[cfg.DefaultAction] {
+	// Validate DefaultAction
+	if !isValidDefaultAction(cfg.DefaultAction) {
 		cfg.DefaultAction = "open"
 	}
 
 	return cfg, nil
 }
 
-// Save writes the configuration to the specified path
+// Save persists the current configuration to the specified file path
 func (c *Config) Save(path string) error {
+	// Create directory if it doesn't exist
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
@@ -136,4 +135,15 @@ func (c *Config) Save(path string) error {
 	}
 
 	return nil
+}
+
+// isValidDefaultAction checks if the default action is valid
+func isValidDefaultAction(action string) bool {
+	validActions := []string{"open", "edit", "list", "daily", "graph"}
+	for _, valid := range validActions {
+		if action == valid {
+			return true
+		}
+	}
+	return false
 }
