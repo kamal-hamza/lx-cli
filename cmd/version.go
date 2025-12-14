@@ -17,10 +17,11 @@ var (
 
 // versionCmd represents the version command
 var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Display version information",
-	Long:  `Display the current version of lx along with build information.`,
-	Run:   runVersion,
+	Use:     "version",
+	Short:   "Display version information",
+	Aliases: []string{"v"},
+	Long:    `Display the current version of lx along with build information. (alias: v)`,
+	Run:     runVersion,
 }
 
 func runVersion(cmd *cobra.Command, args []string) {

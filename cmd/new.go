@@ -43,8 +43,8 @@ func init() {
 
 // runNewDispatcher determines whether to create a note or template
 func runNewDispatcher(cmd *cobra.Command, args []string) error {
-	// Check if first arg is "template"
-	if args[0] == "template" {
+	// Check if first arg is "template" OR "t"
+	if args[0] == "template" || args[0] == "t" {
 		if len(args) < 2 {
 			fmt.Println(ui.FormatError("Template title is required"))
 			return fmt.Errorf("usage: lx new template \"title\"")

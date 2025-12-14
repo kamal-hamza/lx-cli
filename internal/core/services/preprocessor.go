@@ -65,22 +65,43 @@ func (p *Preprocessor) Process(slug string) (string, error) {
 
 // resolveReferences converts \lxnote{slug} and \ref{slug} (deprecated) to \href{./slug.pdf}{Title}
 func (p *Preprocessor) resolveReferences(content string, slugMap map[string]string) string {
-	// Primary: \lxnote{slug} - the new, recommended way to reference notes
-	lxnoteRegex := regexp.MustCompile(`\\lxnote\{([^}]+)\}`)
+	// Primary: \lxnote[optional text]{slug} or \lxnote{slug}
+	// Regex explanation:
+	//   \\lxnote       : Matches literal "\lxnote"
+	//   (?:\[(.*?)\])? : Non-capturing group for optional [text].
+	//                    (.*?) captures the content lazily into submatch 1.
+	//   \{([^}]+)\}    : Matches {slug}. Captures slug into submatch 2.
+	lxnoteRegex := regexp.MustCompile(`\\lxnote(?:\[(.*?)\])?\{([^}]+)\}`)
+
 	content = lxnoteRegex.ReplaceAllStringFunc(content, func(match string) string {
-		submatch := lxnoteRegex.FindStringSubmatch(match)
-		if len(submatch) < 2 {
+		submatches := lxnoteRegex.FindStringSubmatch(match)
+		// submatches[0] = full match
+		// submatches[1] = optional text (might be empty)
+		// submatches[2] = slug
+
+		if len(submatches) < 3 {
 			return match
 		}
-		targetSlug := submatch[1]
 
-		// \lxnote{} MUST refer to a note - error if not found
-		if title, exists := slugMap[targetSlug]; exists {
-			return fmt.Sprintf(`\href{./%s.pdf}{%s}`, targetSlug, title)
+		customText := strings.TrimSpace(submatches[1])
+		targetSlug := strings.TrimSpace(submatches[2])
+
+		// 1. Resolve Target Title
+		targetTitle, exists := slugMap[targetSlug]
+		if !exists {
+			return fmt.Sprintf(`\textbf{[BROKEN LINK: %s]}`, targetSlug)
 		}
 
-		// Note not found - render as warning text
-		return fmt.Sprintf(`\textbf{[BROKEN LINK: %s]}`, targetSlug)
+		// 2. Determine Display Text
+		// If user provided [custom text], use it. Otherwise, use the note's Title.
+		displayText := targetTitle
+		if customText != "" {
+			displayText = customText
+		}
+
+		// 3. Generate Hyperref
+		// We use relative paths so it works in the PDF viewer
+		return fmt.Sprintf(`\href{./%s.pdf}{%s}`, targetSlug, displayText)
 	})
 
 	// Legacy: \ref{slug} - deprecated, only converts if it matches a note slug

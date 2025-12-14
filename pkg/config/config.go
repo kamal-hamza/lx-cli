@@ -14,17 +14,20 @@ type Config struct {
 	// Default template for standard notes
 	DefaultTemplate string `yaml:"default_template"`
 
-	// Template for daily notes (NEW)
+	// Template for daily notes
 	DailyTemplate string `yaml:"daily_template"`
-
-	// Default action for smart entry (open or edit)
-	DefaultAction string `yaml:"default_action"`
 
 	Editor     string `yaml:"editor"`
 	MaxWorkers int    `yaml:"max_workers"`
 
-	// User-defined command aliases
-	Aliases map[string]string `yaml:"aliases,omitempty"`
+	// LaTeX compilation flags
+	LatexmkFlags []string `yaml:"latexmk_flags"`
+
+	// Custom command aliases
+	Aliases map[string]string `yaml:"aliases"`
+
+	// Default action when running 'lx' without arguments
+	DefaultAction string `yaml:"default_action"`
 }
 
 // DefaultConfig returns a config with default values
@@ -32,11 +35,12 @@ func DefaultConfig() *Config {
 	return &Config{
 		Compiler:        "latexmk",
 		DefaultTemplate: "",
-		DailyTemplate:   "", // Default to empty
-		DefaultAction:   "open",
+		DailyTemplate:   "",
 		Editor:          "",
 		MaxWorkers:      4,
+		LatexmkFlags:    []string{"-pdf", "-interaction=nonstopmode"},
 		Aliases:         make(map[string]string),
+		DefaultAction:   "open", // Default to open
 	}
 }
 
@@ -57,24 +61,37 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// Apply defaults for any missing values
+	// Apply defaults and validation
 	if cfg.Compiler == "" {
 		cfg.Compiler = "latexmk"
 	}
 	if cfg.MaxWorkers <= 0 {
 		cfg.MaxWorkers = 4
 	}
-	if cfg.DefaultAction == "" {
-		cfg.DefaultAction = "open"
+	if len(cfg.LatexmkFlags) == 0 {
+		cfg.LatexmkFlags = []string{"-pdf", "-interaction=nonstopmode"}
 	}
-	// Validate default_action value
-	if cfg.DefaultAction != "open" && cfg.DefaultAction != "edit" {
-		cfg.DefaultAction = "open"
-	}
-
-	// Initialize aliases map if nil
 	if cfg.Aliases == nil {
 		cfg.Aliases = make(map[string]string)
+	}
+
+	// Validate and Sanitize DefaultAction
+	// Only allow safe, read-oriented, interactive commands
+	validActions := map[string]bool{
+		"open":    true,
+		"daily":   true,
+		"todo":    true,
+		"graph":   true,
+		"stats":   true,
+		"grep":    true,
+		"explore": true,
+		"edit":    true, // Added based on test requirements
+		"list":    true, // Added as a standard default action
+	}
+
+	if !validActions[cfg.DefaultAction] {
+		// If empty, invalid, or restricted (like 'delete'), fallback to 'open'
+		cfg.DefaultAction = "open"
 	}
 
 	return cfg, nil
