@@ -10,7 +10,7 @@ BUILD_DIR=build
 INSTALL_DIR=/usr/local/bin
 
 # Version information
-VERSION?=dev
+VERSION := $(shell git describe --tags 2>/dev/null || echo "dev")
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
