@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
@@ -23,8 +22,8 @@ var (
 // editCmd represents the edit command
 var editCmd = &cobra.Command{
 	Use:     "edit [query]",
+	Short:   "Edit a note or template in your editor",
 	Aliases: []string{"e"},
-	Short:   "Edit a note or template in your editor (alias: e)",
 	Long: `Edit a note or template in your editor using fuzzy search.
 If no query is provided, shows an interactive list to select from.
 
@@ -189,19 +188,8 @@ func runEditNote(_ *cobra.Command, args []string) error {
 	// Get the note file path
 	notePath := appVault.GetNotePath(selectedNote.Filename)
 
-	// Get editor
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "vi" // Default fallback
-	}
-
-	// Launch editor
-	editorCmd := exec.Command(editor, notePath)
-	editorCmd.Stdin = os.Stdin
-	editorCmd.Stdout = os.Stdout
-	editorCmd.Stderr = os.Stderr
-
-	if err := editorCmd.Run(); err != nil {
+	// Launch editor using consistent helper (line 1)
+	if err := OpenEditorAtLine(notePath, 1); err != nil {
 		fmt.Println(ui.FormatError("Failed to open editor: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually edit: " + notePath))
 		return err
@@ -322,19 +310,8 @@ func runEditTemplate(_ *cobra.Command, args []string) error {
 	// Get the template file path
 	templatePath := selectedTemplate.Path
 
-	// Get editor
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "vi" // Default fallback
-	}
-
-	// Launch editor
-	editorCmd := exec.Command(editor, templatePath)
-	editorCmd.Stdin = os.Stdin
-	editorCmd.Stdout = os.Stdout
-	editorCmd.Stderr = os.Stderr
-
-	if err := editorCmd.Run(); err != nil {
+	// Launch editor using consistent helper (line 1)
+	if err := OpenEditorAtLine(templatePath, 1); err != nil {
 		fmt.Println(ui.FormatError("Failed to open editor: " + err.Error()))
 		fmt.Println(ui.FormatInfo("You can manually edit: " + templatePath))
 		return err
