@@ -56,9 +56,10 @@ func (p *Parser) Parse(content string) (*ParseResult, error) {
 	lineNum := 0
 
 	// Regex helpers
-	reTitle := regexp.MustCompile(`(?i)^%\s*Title:\s*(.+)`)
-	reDate := regexp.MustCompile(`(?i)^%\s*Date:\s*(.+)`)
-	reTags := regexp.MustCompile(`(?i)^%\s*Tags:\s*(.+)`)
+	// Fix: Changed ^% to ^%+ to match one or more percent signs
+	reTitle := regexp.MustCompile(`(?i)^%+\s*Title:\s*(.+)`)
+	reDate := regexp.MustCompile(`(?i)^%+\s*Date:\s*(.+)`)
+	reTags := regexp.MustCompile(`(?i)^%+\s*Tags:\s*(.+)`)
 
 	foundTitle := false
 	foundDate := false
@@ -157,7 +158,8 @@ func UpdateTitle(content, newTitle string) (string, error) {
 	// Match the line starting with "% title:" or "% Title:"
 	// (?m) enables multi-line mode so ^ matches start of line
 	// (?i) enables case-insensitive matching
-	re := regexp.MustCompile(`(?mi)(^%\s*title:\s*)(.+)`)
+	// Fix: Changed ^% to ^%+ here as well to match double percent signs
+	re := regexp.MustCompile(`(?mi)(^%+\s*title:\s*)(.+)`)
 
 	if !re.MatchString(content) {
 		return "", fmt.Errorf("title metadata not found in content")
