@@ -30,10 +30,41 @@ func OpenFile(path string, viewer string) error {
 	var cmd *exec.Cmd
 
 	if viewer != "" {
-		// Use user-configured viewer (e.g. zathura, skim)
-		cmd = exec.Command(viewer, path)
+		// Use user-configured viewer
+		// We split the string to support flags like "code -g"
+		parts := strings.Fields(viewer)
+		if len(parts) == 0 {
+			return fmt.Errorf("invalid viewer configuration")
+		}
+
+		command := parts[0]
+		// Append the file path to any existing arguments (e.g. flags)
+		args := append(parts[1:], path)
+
+		// 1. Try to find the executable in the system PATH
+		// This handles commands like "code", "zathura", "acroread"
+		if pathCmd, err := exec.LookPath(command); err == nil {
+			cmd = exec.Command(pathCmd, args...)
+		} else {
+			// 2. If not in PATH, try the OS-specific "App Launcher" mechanism
+			// This handles App names that aren't binaries (e.g. "Skim", "SumatraPDF")
+			switch runtime.GOOS {
+			case "darwin":
+				// macOS: use 'open -a "App Name"'
+				// We don't pass the extra args here because 'open' syntax differs
+				cmd = exec.Command("open", "-a", command, path)
+			case "windows":
+				// Windows: use 'start "App Name"'
+				// Syntax: cmd /c start "Title" "App" "File"
+				startArgs := append([]string{"/c", "start", "", command}, args...)
+				cmd = exec.Command("cmd", startArgs...)
+			default:
+				// Linux/Unix: generally requires the tool to be in the PATH.
+				return fmt.Errorf("command '%s' not found in PATH", command)
+			}
+		}
 	} else {
-		// Fallback to OS default
+		// Fallback to OS default handler
 		switch runtime.GOOS {
 		case "darwin":
 			cmd = exec.Command("open", path)
