@@ -33,28 +33,39 @@ func NewPreprocessor(repo ports.Repository, v *vault.Vault, enableCache bool, ca
 // Returns the absolute path to the preprocessed file in the cache
 func (p *Preprocessor) Process(slug string) (string, error) {
 	tempFilename := slug + ".tex"
-	tempPath := filepath.Join(p.vault.CachePath, tempFilename)
+	tempPath := filepath.Join(p.vault.CachePath, tempFilename) //
 
-	// 0. Check Cache
-	if p.enableCache {
-		info, err := os.Stat(tempPath)
-		if err == nil {
-			age := time.Since(info.ModTime())
-			if age.Minutes() < float64(p.cacheExpirationMins) {
-				return tempPath, nil
-			}
-		}
-	}
-
-	// 1. Get Source Content
-	note, err := p.repo.Get(context.Background(), slug)
+	// 1. Get Source Content and Metadata
+	// We need the note first to find its original filename for the file-system check
+	note, err := p.repo.Get(context.Background(), slug) //
 	if err != nil {
 		return "", err
 	}
 	content := note.Content
+	sourcePath := p.vault.GetNotePath(note.Header.Filename) //
 
-	// 2. Get All Note Headers (for cross-reference lookup)
-	headers, err := p.repo.ListHeaders(context.Background())
+	// 2. Advanced Cache Check
+	if p.enableCache {
+		cacheInfo, cacheErr := os.Stat(tempPath)
+		sourceInfo, sourceErr := os.Stat(sourcePath)
+
+		// Only use cache if:
+		// - The cached file exists
+		// - The source file exists
+		// - The cached file is NEWER than the source file
+		// - The cached file hasn't reached the hard expiration limit (cacheExpirationMins)
+		if cacheErr == nil && sourceErr == nil {
+			if cacheInfo.ModTime().After(sourceInfo.ModTime()) {
+				age := time.Since(cacheInfo.ModTime())
+				if age.Minutes() < float64(p.cacheExpirationMins) {
+					return tempPath, nil // Return early if cache is valid
+				}
+			}
+		}
+	}
+
+	// 3. Resolve Cross-Reference Data
+	headers, err := p.repo.ListHeaders(context.Background()) //
 	if err != nil {
 		return "", err
 	}
@@ -64,15 +75,14 @@ func (p *Preprocessor) Process(slug string) (string, error) {
 		slugMap[h.Slug] = h.Title
 	}
 
-	// 3. Process Content
-	content = p.resolveReferences(content, slugMap)
-	content = p.resolveInputs(content)
-	content = p.resolveGraphics(content)
-	content = p.ensureHyperref(content)
+	// 4. Process Content (Resolving links, paths, and packages)
+	content = p.resolveReferences(content, slugMap) //
+	content = p.resolveInputs(content)              //
+	content = p.resolveGraphics(content)            //
+	content = p.ensureHyperref(content)             //
 
-	// 4. Write to Cache
-	// We write to the cache directory so we don't clutter the notes folder
-
+	// 5. Write to Cache
+	// This updates the modification time of the cache file
 	if err := os.WriteFile(tempPath, []byte(content), 0644); err != nil {
 		return "", fmt.Errorf("failed to write preprocessed file: %w", err)
 	}

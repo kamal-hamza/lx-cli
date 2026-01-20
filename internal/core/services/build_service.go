@@ -27,7 +27,7 @@ func NewBuildService(noteRepo ports.Repository, compiler ports.Compiler, v *vaul
 		compiler: compiler,
 		// Pass default cache settings here to avoid breaking changes if config isn't passed
 		// In root.go we use NewBuildServiceWithPreprocessor to pass real config
-		preprocessor: NewPreprocessor(noteRepo, v, true, 30),
+		preprocessor: NewPreprocessor(noteRepo, v, false, 30),
 		vault:        v,
 	}
 }
