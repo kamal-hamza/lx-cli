@@ -41,7 +41,7 @@ A high-performance, opinionated CLI for managing LaTeX notes. Treat your notes a
 ### From Source
 
 ```bash
-git clone https://github.com/yourusername/lx-cli.git
+git clone https://github.com/kamal-hamza/lx-cli.git
 cd lx-cli
 make build
 # or
@@ -51,7 +51,7 @@ go build -o lx
 ### Using Go Install
 
 ```bash
-go install github.com/yourusername/lx-cli@latest
+go install github.com/kamal-hamza/lx-cli@latest
 ```
 
 ## Quick Start
